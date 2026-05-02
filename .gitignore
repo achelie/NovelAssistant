@@ -38,6 +38,9 @@ buildNumber.properties
 *.log
 logs/
 
+### Environment ###
+.env
+
 ### OS ###
 .DS_Store
 Thumbs.db

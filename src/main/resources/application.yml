@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${env.SERVER_PORT:8080}
 
 spring:
   profiles:
@@ -10,3 +10,8 @@ spring:
     time-zone: Asia/Shanghai
     serialization:
       write-dates-as-timestamps: false
+
+app:
+  jwt:
+    secret: ${env.JWT_SECRET}
+    expiration: ${env.JWT_EXPIRATION:86400000}
