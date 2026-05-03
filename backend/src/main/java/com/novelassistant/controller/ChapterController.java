@@ -8,9 +8,12 @@ import com.novelassistant.entity.Chapter;
 import com.novelassistant.entity.Novel;
 import com.novelassistant.exception.BusinessException;
 import com.novelassistant.service.ChapterService;
+import com.novelassistant.service.EmbeddingService;
 import com.novelassistant.service.NovelService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/chapter")
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class ChapterController {
 
     private final ChapterService chapterService;
     private final NovelService novelService;
+    private final EmbeddingService embeddingService;
 
     @PostMapping
     public Result<Chapter> create(@Valid @RequestBody CreateChapterRequest request) {
@@ -45,6 +50,8 @@ public class ChapterController {
         chapter.setChapterIndex(request.getChapterIndex());
 
         chapterService.save(chapter);
+
+        asyncIndex("chapter", chapter.getId(), chapter.getNovelId(), chapter.getContent());
 
         return Result.success(chapter);
     }
@@ -106,6 +113,8 @@ public class ChapterController {
 
         chapterService.updateById(chapter);
 
+        asyncIndex("chapter", chapter.getId(), chapter.getNovelId(), chapter.getContent());
+
         return Result.success(chapter);
     }
 
@@ -119,9 +128,20 @@ public class ChapterController {
         }
         checkOwnership(chapter, userId);
 
+        embeddingService.removeBySource("chapter", id);
         chapterService.removeById(id);
 
         return Result.success();
+    }
+
+    private void asyncIndex(String sourceType, Long sourceId, Long novelId, String content) {
+        if (content != null && !content.isBlank()) {
+            try {
+                embeddingService.indexText(novelId, sourceType, sourceId, content);
+            } catch (Exception e) {
+                log.warn("自动向量化失败: sourceType={}, sourceId={}", sourceType, sourceId, e);
+            }
+        }
     }
 
     private void checkOwnership(Chapter chapter, Long userId) {

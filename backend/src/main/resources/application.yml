@@ -15,3 +15,8 @@ app:
   jwt:
     secret: ${env.JWT_SECRET}
     expiration: ${env.JWT_EXPIRATION:86400000}
+  zhipu:
+    api-key: ${env.ZHIPU_API_KEY}
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    chat-model: glm-4-flash
+    embedding-model: embedding-3

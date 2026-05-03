@@ -114,3 +114,17 @@ CREATE TABLE IF NOT EXISTS `summary` (
     KEY `idx_novel_id` (`novel_id`),
     KEY `idx_chapter_index` (`chapter_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='摘要表';
+
+-- 文本分块与向量表（RAG用）
+CREATE TABLE IF NOT EXISTS `text_chunk` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+    `novel_id`    BIGINT       NOT NULL COMMENT '所属小说',
+    `source_type` VARCHAR(20)  NOT NULL COMMENT '来源类型：chapter/summary/world_setting',
+    `source_id`   BIGINT       NOT NULL COMMENT '来源ID',
+    `chunk_text`  TEXT         NOT NULL COMMENT '分块文本',
+    `embedding`   MEDIUMBLOB            DEFAULT NULL COMMENT '向量 float[] 序列化',
+    `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_novel_id` (`novel_id`),
+    KEY `idx_source` (`source_type`, `source_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文本分块与向量表';

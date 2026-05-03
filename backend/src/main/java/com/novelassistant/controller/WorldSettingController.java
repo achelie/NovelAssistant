@@ -4,15 +4,18 @@ import com.novelassistant.common.Result;
 import com.novelassistant.entity.Novel;
 import com.novelassistant.entity.WorldSetting;
 import com.novelassistant.exception.BusinessException;
+import com.novelassistant.service.EmbeddingService;
 import com.novelassistant.service.NovelService;
 import com.novelassistant.service.WorldSettingService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/world-setting")
 @RequiredArgsConstructor
@@ -20,6 +23,7 @@ public class WorldSettingController {
 
     private final WorldSettingService worldSettingService;
     private final NovelService novelService;
+    private final EmbeddingService embeddingService;
 
     @PostMapping
     public Result<WorldSetting> create(@RequestBody WorldSetting worldSetting) {
@@ -27,6 +31,9 @@ public class WorldSettingController {
         checkNovelOwnership(worldSetting.getNovelId(), userId);
 
         worldSettingService.save(worldSetting);
+
+        asyncIndex("world_setting", worldSetting.getId(), worldSetting.getNovelId(), worldSetting.getContent());
+
         return Result.success(worldSetting);
     }
 
@@ -61,6 +68,9 @@ public class WorldSettingController {
 
         worldSetting.setId(id);
         worldSettingService.updateById(worldSetting);
+
+        asyncIndex("world_setting", id, existing.getNovelId(), worldSetting.getContent());
+
         return Result.success();
     }
 
@@ -73,8 +83,19 @@ public class WorldSettingController {
         }
         checkNovelOwnership(existing.getNovelId(), userId);
 
+        embeddingService.removeBySource("world_setting", id);
         worldSettingService.removeById(id);
         return Result.success();
+    }
+
+    private void asyncIndex(String sourceType, Long sourceId, Long novelId, String content) {
+        if (content != null && !content.isBlank()) {
+            try {
+                embeddingService.indexText(novelId, sourceType, sourceId, content);
+            } catch (Exception e) {
+                log.warn("自动向量化失败: sourceType={}, sourceId={}", sourceType, sourceId, e);
+            }
+        }
     }
 
     private void checkNovelOwnership(Long novelId, Long userId) {
