@@ -145,6 +145,12 @@ export interface CreateSummaryRequest {
   content?: string
 }
 
+export interface GenerateSummaryRequest {
+  novelId: number
+  chapterIds: number[]
+  title?: string
+}
+
 export interface UpdateSummaryRequest {
   title?: string
   chapterIndex?: number

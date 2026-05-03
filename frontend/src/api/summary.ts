@@ -2,6 +2,7 @@ import request from './request'
 import type {
   ApiResult,
   CreateSummaryRequest,
+  GenerateSummaryRequest,
   Summary,
   UpdateSummaryRequest,
 } from '../types'
@@ -24,4 +25,8 @@ export function updateSummary(id: number, data: UpdateSummaryRequest) {
 
 export function deleteSummary(id: number) {
   return request.delete<any, ApiResult<void>>(`/summary/${id}`)
+}
+
+export function generateSummary(data: GenerateSummaryRequest) {
+  return request.post<any, ApiResult<Summary[]>>('/summary/generate', data)
 }
