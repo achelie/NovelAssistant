@@ -115,6 +115,59 @@ export interface UpdateCharacterRequest {
   background?: string
 }
 
+// ── Plot timeline ──
+
+export interface PlotTimeline {
+  id: number
+  novelId: number
+  title: string
+  description: string | null
+  eventTime: string | null
+  relatedCharacters: string | null
+  createdAt: string
+}
+
+export interface CreatePlotTimelineRequest {
+  novelId: number
+  title: string
+  description?: string
+  eventTime?: string
+  relatedCharacters?: string
+}
+
+export interface UpdatePlotTimelineRequest {
+  novelId: number
+  title: string
+  description?: string
+  eventTime?: string
+  relatedCharacters?: string
+}
+
+// ── Character relation ──
+
+export interface CharacterRelation {
+  id: number
+  novelId: number
+  characterAId: number
+  characterBId: number
+  relationType: string
+  description: string | null
+  createdAt: string
+}
+
+export interface CreateCharacterRelationRequest {
+  novelId: number
+  characterAId: number
+  characterBId: number
+  relationType: string
+  description?: string
+}
+
+export interface UpdateCharacterRelationRequest {
+  relationType?: string
+  description?: string
+}
+
 // ── WorldSetting ──
 
 export interface WorldSetting {

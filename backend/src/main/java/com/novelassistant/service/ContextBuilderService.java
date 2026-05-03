@@ -24,6 +24,7 @@ public interface ContextBuilderService {
             java.util.List<Long> characterIds,
             java.util.List<Long> worldSettingIds,
             java.util.List<Long> characterRelationIds,
+            java.util.List<Long> plotTimelineIds,
             String chapterOutline
     ) {}
 }

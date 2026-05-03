@@ -19,6 +19,7 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
     private final CharacterService characterService;
     private final WorldSettingService worldSettingService;
     private final CharacterRelationService characterRelationService;
+    private final PlotTimelineService plotTimelineService;
     private final EmbeddingService embeddingService;
     private final ZhipuAiService zhipuAiService;
 
@@ -54,6 +55,12 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
         String relationSection = buildRelationSection(context.characterRelationIds(), context.characterIds());
         if (!relationSection.isEmpty()) {
             prompt.append("【角色关系】\n").append(relationSection).append("\n\n");
+        }
+
+        // 3.5 剧情时间线
+        String plotSection = buildPlotTimelineSection(context.plotTimelineIds());
+        if (!plotSection.isEmpty()) {
+            prompt.append("【剧情时间线】\n").append(plotSection).append("\n\n");
         }
 
         // 4. 世界观设定
@@ -154,6 +161,24 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
     private String getCharacterName(Long characterId) {
         Character c = characterService.getById(characterId);
         return c != null ? c.getName() : "未知角色";
+    }
+
+    private String buildPlotTimelineSection(List<Long> plotTimelineIds) {
+        if (plotTimelineIds == null || plotTimelineIds.isEmpty()) return "";
+
+        return plotTimelineIds.stream()
+                .map(plotTimelineService::getById)
+                .filter(p -> p != null)
+                .map(p -> {
+                    String time = p.getEventTime() != null && !p.getEventTime().isBlank()
+                            ? "[" + p.getEventTime() + "] "
+                            : "";
+                    String desc = p.getDescription() != null && !p.getDescription().isBlank()
+                            ? "：" + truncate(p.getDescription(), 200)
+                            : "";
+                    return "- " + time + p.getTitle() + desc;
+                })
+                .collect(Collectors.joining("\n"));
     }
 
     private String buildWorldSettingSection(List<Long> worldSettingIds) {

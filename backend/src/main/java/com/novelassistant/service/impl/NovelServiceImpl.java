@@ -23,8 +23,9 @@ public class NovelServiceImpl extends ServiceImpl<NovelMapper, Novel> implements
     }
 
     @Override
-    public PageResult<Novel> pageQuery(int page, int pageSize, String keyword) {
-        LambdaQueryWrapper<Novel> wrapper = new LambdaQueryWrapper<>();
+    public PageResult<Novel> pageQuery(Long userId, int page, int pageSize, String keyword) {
+        LambdaQueryWrapper<Novel> wrapper = new LambdaQueryWrapper<Novel>()
+                .eq(Novel::getUserId, userId);
 
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w

@@ -43,15 +43,20 @@ public class NovelController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String keyword) {
-        PageResult<Novel> result = novelService.pageQuery(page, pageSize, keyword);
+        Long userId = getCurrentUserId();
+        PageResult<Novel> result = novelService.pageQuery(userId, page, pageSize, keyword);
         return Result.success(result);
     }
 
     @GetMapping("/{id}")
     public Result<Novel> getById(@PathVariable Long id) {
+        Long userId = getCurrentUserId();
         Novel novel = novelService.getById(id);
         if (novel == null) {
             throw new BusinessException(404, "小说不存在");
+        }
+        if (!novel.getUserId().equals(userId)) {
+            throw new BusinessException(403, "无权查看他人的小说");
         }
         return Result.success(novel);
     }
@@ -105,7 +110,9 @@ public class NovelController {
 
     private Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getPrincipal() == null) {
+        if (authentication == null
+                || authentication.getPrincipal() == null
+                || !(authentication.getPrincipal() instanceof Long)) {
             throw new BusinessException(401, "请先登录");
         }
         return (Long) authentication.getPrincipal();

@@ -8,6 +8,8 @@ import ChapterPage from '../pages/ChapterPage'
 import CharacterPage from '../pages/CharacterPage'
 import WorldSettingPage from '../pages/WorldSettingPage'
 import SummaryPage from '../pages/SummaryPage'
+import CharacterRelationPage from '../pages/CharacterRelationPage'
+import PlotTimelinePage from '../pages/PlotTimelinePage'
 import ProtectedRoute from '../components/ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -25,6 +27,8 @@ export const router = createBrowserRouter([
       { path: 'novels', element: <NovelPage /> },
       { path: 'chapters', element: <ChapterPage /> },
       { path: 'characters', element: <CharacterPage /> },
+      { path: 'character-relations', element: <CharacterRelationPage /> },
+      { path: 'plot-timeline', element: <PlotTimelinePage /> },
       { path: 'world-setting', element: <WorldSettingPage /> },
       { path: 'summaries', element: <SummaryPage /> },
     ],

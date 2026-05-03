@@ -22,6 +22,8 @@ const navItems: NavItem[] = [
   { to: '/novels', label: '小说管理', icon: BookOpenIcon },
   { to: '/chapters', label: '章节管理', icon: DocumentIcon, requiresNovel: true },
   { to: '/characters', label: '角色卡', icon: UserIcon, requiresNovel: true },
+  { to: '/character-relations', label: '人物关系', icon: LinkIcon, requiresNovel: true },
+  { to: '/plot-timeline', label: '剧情时间线', icon: TimelineIcon, requiresNovel: true },
   { to: '/world-setting', label: '世界观设定', icon: GlobeIcon, requiresNovel: true },
   { to: '/summaries', label: '摘要管理', icon: ListIcon, requiresNovel: true },
 ]
@@ -197,6 +199,26 @@ function ListIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+  )
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M13.19 8.688a4.5 4.5 0 0 1 6.364 6.364l-3 3a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m4.243 4.242 4.243-4.243m-4.243 4.242L12 12m-4.243-4.243-1.757 1.757a4.5 4.5 0 0 0 6.364 6.364l3-3a4.5 4.5 0 0 0-6.364-6.364L7.757 7.757Z"
+      />
+    </svg>
+  )
+}
+
+function TimelineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
     </svg>
   )
 }

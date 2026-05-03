@@ -22,6 +22,8 @@ public class WritingRequest {
 
     private List<Long> characterRelationIds;
 
+    private List<Long> plotTimelineIds;
+
     @NotBlank(message = "章纲不能为空")
     private String chapterOutline;
 

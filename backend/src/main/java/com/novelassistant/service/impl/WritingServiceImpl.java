@@ -40,6 +40,7 @@ public class WritingServiceImpl implements WritingService {
                 nullToEmpty(request.getCharacterIds()),
                 nullToEmpty(request.getWorldSettingIds()),
                 nullToEmpty(request.getCharacterRelationIds()),
+                nullToEmpty(request.getPlotTimelineIds()),
                 request.getChapterOutline()
         );
 

@@ -10,5 +10,5 @@ public interface NovelService extends IService<Novel> {
 
     List<Novel> listByUserId(Long userId);
 
-    PageResult<Novel> pageQuery(int page, int pageSize, String keyword);
+    PageResult<Novel> pageQuery(Long userId, int page, int pageSize, String keyword);
 }
