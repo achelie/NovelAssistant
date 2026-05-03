@@ -1,5 +1,5 @@
 server:
-  port: ${env.SERVER_PORT:8080}
+  port: 8080
 
 spring:
   profiles:
@@ -13,10 +13,10 @@ spring:
 
 app:
   jwt:
-    secret: ${env.JWT_SECRET}
-    expiration: ${env.JWT_EXPIRATION:86400000}
+    secret: your-jwt-secret-key-here-change-in-production
+    expiration: 86400000
   zhipu:
-    api-key: ${env.ZHIPU_API_KEY}
+    api-key: 5c845d4acaa44101a3fca9e75e8e4749.up6deSiCryyv1Mbl
     base-url: https://open.bigmodel.cn/api/paas/v4
     chat-model: glm-4-flash
     embedding-model: embedding-3

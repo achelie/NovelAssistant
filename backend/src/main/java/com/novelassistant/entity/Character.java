@@ -2,11 +2,13 @@ package com.novelassistant.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import org.apache.ibatis.type.Alias;
 
 import java.time.LocalDateTime;
 
 @Data
 @TableName("character_info")
+@Alias("CharacterEntity")
 public class Character {
 
     @TableId(type = IdType.AUTO)
