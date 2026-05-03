@@ -16,6 +16,12 @@ public class ZhipuAiConfig {
     private String chatModel;
     private String embeddingModel;
 
+    /** 未指定时流式/同步补全的最大 token 上限（智谱缺省约 1024，长文会过早截断） */
+    private int defaultMaxCompletionTokens = 8192;
+
+    /** 单次请求 max_tokens 硬上限，避免超出模型能力 */
+    private int maxCompletionTokensCeiling = 16384;
+
     @Bean("zhipuWebClient")
     public WebClient zhipuWebClient() {
         return WebClient.builder()

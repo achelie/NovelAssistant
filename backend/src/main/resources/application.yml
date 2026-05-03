@@ -20,3 +20,6 @@ app:
     base-url: https://open.bigmodel.cn/api/paas/v4
     chat-model: glm-4-flash
     embedding-model: embedding-3
+    # 智谱未传 max_tokens 时默认约 1024，中文续写约千字即停；可按模型上限调高
+    default-max-completion-tokens: 8192
+    max-completion-tokens-ceiling: 16384

@@ -1,21 +1,40 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNovel } from '../contexts/NovelContext'
+import { listCharacters } from '../api/character'
 import {
   listPlotTimelinesByNovel,
   createPlotTimeline,
   updatePlotTimeline,
   deletePlotTimeline,
 } from '../api/plotTimeline'
-import type { PlotTimeline, UpdatePlotTimelineRequest } from '../types'
+import type { Character, PlotTimeline, UpdatePlotTimelineRequest } from '../types'
 
 interface ModalState {
   open: boolean
   editing: PlotTimeline | null
 }
 
+function parseStoredCharacterIds(raw: string | null | undefined): number[] {
+  if (!raw?.trim()) return []
+  return raw
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+}
+
+function formatRelatedCharacterLabels(
+  csv: string | null,
+  nameById: Map<number, string>,
+): string {
+  const ids = parseStoredCharacterIds(csv ?? '')
+  if (ids.length === 0) return (csv ?? '').trim() || '—'
+  return ids.map((id) => nameById.get(id) ?? `角色#${id}`).join('、')
+}
+
 export default function PlotTimelinePage() {
   const { current } = useNovel()
   const [items, setItems] = useState<PlotTimeline[]>([])
+  const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [modal, setModal] = useState<ModalState>({ open: false, editing: null })
@@ -24,7 +43,15 @@ export default function PlotTimelinePage() {
   const [formTitle, setFormTitle] = useState('')
   const [formEventTime, setFormEventTime] = useState('')
   const [formDescription, setFormDescription] = useState('')
-  const [formRelated, setFormRelated] = useState('')
+  const [selectedCharacterIds, setSelectedCharacterIds] = useState<number[]>([])
+
+  const characterNameById = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const c of characters) {
+      m.set(c.id, c.name)
+    }
+    return m
+  }, [characters])
 
   const fetchList = useCallback(async (novelId: number) => {
     setLoading(true)
@@ -41,19 +68,38 @@ export default function PlotTimelinePage() {
     }
   }, [])
 
+  const fetchCharacters = useCallback(async (novelId: number) => {
+    try {
+      const res = await listCharacters(1, 200)
+      setCharacters(res.data.records.filter((c) => c.novelId === novelId))
+    } catch {
+      setCharacters([])
+    }
+  }, [])
+
   useEffect(() => {
     if (current) {
       fetchList(current.id)
+      fetchCharacters(current.id)
     } else {
       setItems([])
+      setCharacters([])
     }
-  }, [current, fetchList])
+  }, [current, fetchList, fetchCharacters])
+
+  const toggleRelatedCharacter = (id: number) => {
+    setSelectedCharacterIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].sort((a, b) => a - b),
+    )
+  }
+
+  const clearRelatedCharacters = () => setSelectedCharacterIds([])
 
   const openCreate = () => {
     setFormTitle('')
     setFormEventTime('')
     setFormDescription('')
-    setFormRelated('')
+    setSelectedCharacterIds([])
     setModal({ open: true, editing: null })
   }
 
@@ -61,7 +107,7 @@ export default function PlotTimelinePage() {
     setFormTitle(row.title)
     setFormEventTime(row.eventTime ?? '')
     setFormDescription(row.description ?? '')
-    setFormRelated(row.relatedCharacters ?? '')
+    setSelectedCharacterIds(parseStoredCharacterIds(row.relatedCharacters))
     setModal({ open: true, editing: row })
   }
 
@@ -71,6 +117,8 @@ export default function PlotTimelinePage() {
     if (!formTitle.trim() || !current) return
     setSaving(true)
     setError('')
+    const relatedCharacters =
+      selectedCharacterIds.length > 0 ? selectedCharacterIds.join(',') : ''
     try {
       if (modal.editing) {
         const body: UpdatePlotTimelineRequest = {
@@ -78,7 +126,7 @@ export default function PlotTimelinePage() {
           title: formTitle.trim(),
           description: formDescription.trim() || undefined,
           eventTime: formEventTime.trim() || undefined,
-          relatedCharacters: formRelated.trim() || undefined,
+          relatedCharacters,
         }
         await updatePlotTimeline(modal.editing.id, body)
       } else {
@@ -87,7 +135,7 @@ export default function PlotTimelinePage() {
           title: formTitle.trim(),
           description: formDescription.trim() || undefined,
           eventTime: formEventTime.trim() || undefined,
-          relatedCharacters: formRelated.trim() || undefined,
+          relatedCharacters: relatedCharacters || undefined,
         })
       }
       closeModal()
@@ -184,8 +232,12 @@ export default function PlotTimelinePage() {
                         </p>
                       )}
                       {row.relatedCharacters && (
-                        <p className="mt-2 text-xs text-slate-400">
-                          相关角色（ID）：{row.relatedCharacters}
+                        <p className="mt-2 text-xs text-slate-500">
+                          相关角色：
+                          {formatRelatedCharacterLabels(
+                            row.relatedCharacters,
+                            characterNameById,
+                          )}
                         </p>
                       )}
                     </div>
@@ -255,16 +307,50 @@ export default function PlotTimelinePage() {
                   placeholder="情节要点、转折点等"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">相关角色 ID</span>
-                <input
-                  type="text"
-                  value={formRelated}
-                  onChange={(e) => setFormRelated(e.target.value)}
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  placeholder="多个 ID 用英文逗号分隔，可选"
-                />
-              </label>
+              <div className="block">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-700">相关角色（可选）</span>
+                  {selectedCharacterIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearRelatedCharacters}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                    >
+                      清空已选
+                    </button>
+                  )}
+                </div>
+                {characters.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                    当前小说暂无角色，请先在「角色卡」中添加角色后再勾选。
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    {characters.map((ch) => {
+                      const checked = selectedCharacterIds.includes(ch.id)
+                      return (
+                        <label
+                          key={ch.id}
+                          className={`flex cursor-pointer items-center rounded-md px-3 py-2 text-sm transition-colors ${
+                            checked
+                              ? 'border border-indigo-200 bg-indigo-50'
+                              : 'border border-transparent bg-white hover:bg-slate-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleRelatedCharacter(ch.id)}
+                            className="h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="ml-2 font-medium text-slate-800">{ch.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-slate-400">可多选。</p>
+              </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button

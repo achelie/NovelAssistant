@@ -209,3 +209,25 @@ export interface UpdateSummaryRequest {
   chapterIndex?: number
   content?: string
 }
+
+// ── AI 续写 ──
+
+export interface WritingRequest {
+  novelId: number
+  summaryIds?: number[]
+  characterIds?: number[]
+  worldSettingIds?: number[]
+  characterRelationIds?: number[]
+  plotTimelineIds?: number[]
+  chapterOutline: string
+  writingStyle?: string
+  targetWordCount?: number
+  chapterTitle?: string
+  chapterIndex?: number
+}
+
+export interface WritingPromptPreview {
+  systemPrompt: string
+  userPrompt: string
+  fullText: string
+}

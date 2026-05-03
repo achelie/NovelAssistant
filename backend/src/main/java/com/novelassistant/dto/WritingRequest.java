@@ -27,6 +27,13 @@ public class WritingRequest {
     @NotBlank(message = "章纲不能为空")
     private String chapterOutline;
 
+    /** 文风描述，最多约 200 字 */
+    @Size(max = 200, message = "文风描述不能超过200字")
+    private String writingStyle;
+
+    /** 目标字数：2000 / 3000 / 4000，缺省由服务端按 3000 处理 */
+    private Integer targetWordCount;
+
     private String chapterTitle;
 
     private Integer chapterIndex;

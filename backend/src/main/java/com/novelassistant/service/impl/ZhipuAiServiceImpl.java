@@ -34,8 +34,8 @@ public class ZhipuAiServiceImpl implements ZhipuAiService {
     }
 
     @Override
-    public Flux<String> chatStream(String systemPrompt, String userPrompt) {
-        ObjectNode body = buildChatBody(systemPrompt, userPrompt, true);
+    public Flux<String> chatStream(String systemPrompt, String userPrompt, Integer maxCompletionTokens) {
+        ObjectNode body = buildChatBody(systemPrompt, userPrompt, true, maxCompletionTokens);
 
         return webClient.post()
                 .uri("/chat/completions")
@@ -54,7 +54,7 @@ public class ZhipuAiServiceImpl implements ZhipuAiService {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
-        ObjectNode body = buildChatBody(systemPrompt, userPrompt, false);
+        ObjectNode body = buildChatBody(systemPrompt, userPrompt, false, null);
 
         try {
             String response = webClient.post()
@@ -117,10 +117,17 @@ public class ZhipuAiServiceImpl implements ZhipuAiService {
         }
     }
 
-    private ObjectNode buildChatBody(String systemPrompt, String userPrompt, boolean stream) {
+    private ObjectNode buildChatBody(String systemPrompt, String userPrompt, boolean stream,
+                                       Integer maxCompletionTokens) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("model", config.getChatModel());
         body.put("stream", stream);
+
+        int maxTokens = maxCompletionTokens != null
+                ? maxCompletionTokens
+                : config.getDefaultMaxCompletionTokens();
+        maxTokens = Math.min(Math.max(maxTokens, 256), config.getMaxCompletionTokensCeiling());
+        body.put("max_tokens", maxTokens);
 
         ArrayNode messages = body.putArray("messages");
 

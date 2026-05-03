@@ -1,6 +1,7 @@
 package com.novelassistant.controller;
 
 import com.novelassistant.common.Result;
+import com.novelassistant.dto.WritingPromptPreviewResponse;
 import com.novelassistant.dto.WritingRequest;
 import com.novelassistant.exception.BusinessException;
 import com.novelassistant.service.WritingService;
@@ -27,6 +28,15 @@ public class WritingController {
     public Flux<String> generate(@Valid @RequestBody WritingRequest request) {
         Long userId = getCurrentUserId();
         return writingService.generateStream(request, userId);
+    }
+
+    /**
+     * 预览最终拼装的 Prompt（不调用大模型；摘要过长时仅截断，不触发压缩模型）
+     */
+    @PostMapping("/preview-prompt")
+    public Result<WritingPromptPreviewResponse> previewPrompt(@Valid @RequestBody WritingRequest request) {
+        Long userId = getCurrentUserId();
+        return Result.success(writingService.previewPrompts(request, userId));
     }
 
     /**

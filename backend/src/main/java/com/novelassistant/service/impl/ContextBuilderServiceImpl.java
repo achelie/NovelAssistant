@@ -6,6 +6,7 @@ import com.novelassistant.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,9 +31,9 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
     @Override
     public String buildSystemPrompt() {
         return "你是一位专业的小说创作者，擅长根据已有设定续写连贯的章节内容。" +
-               "你需要严格遵循给定的角色性格、世界观设定和剧情走向，" +
-               "保持文风统一，情节连贯，人物形象鲜明。" +
-               "输出纯小说正文内容，不要添加任何元信息或解释。";
+               "你需要严格遵循给定的角色性格、世界观设定、剧情走向与文风要求，" +
+               "保持情节连贯、人物形象鲜明。" +
+               "输出纯小说正文内容，不要添加任何元信息、标题前缀或 Markdown 解释。";
     }
 
     @Override
@@ -40,7 +41,7 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
         StringBuilder prompt = new StringBuilder();
 
         // 1. 剧情背景（摘要压缩）
-        String summarySection = buildSummarySection(context.summaryIds());
+        String summarySection = buildSummarySection(context.summaryIds(), context.skipLlmCompression());
         if (!summarySection.isEmpty()) {
             prompt.append("【剧情背景】\n").append(summarySection).append("\n\n");
         }
@@ -69,22 +70,39 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
             prompt.append("【世界观设定】\n").append(worldSection).append("\n\n");
         }
 
-        // 5. RAG 相关上下文
-        String ragSection = buildRagSection(context.novelId(), context.chapterOutline());
+        // 5. 向量库：伏笔与关联剧情
+        String ragSection = buildRagSection(
+                context.novelId(),
+                context.chapterOutline(),
+                context.writingStyle());
         if (!ragSection.isEmpty()) {
-            prompt.append("【相关上下文参考】\n").append(ragSection).append("\n\n");
+            prompt.append("【伏笔与关联剧情（向量检索）】\n")
+                    .append("以下片段来自小说已索引的正文、摘要或设定，按与「章纲+文风」的语义相关度选取，写作时请自然呼应、收束伏笔或保持设定一致：\n")
+                    .append(ragSection)
+                    .append("\n\n");
         }
 
         // 6. 章纲
         prompt.append("【本章大纲】\n").append(context.chapterOutline()).append("\n\n");
 
-        prompt.append("【要求】\n");
-        prompt.append("请根据以上信息续写本章内容。保持人物性格一致，情节连贯，文风统一。直接输出小说正文。");
+        // 7. 文风
+        if (StringUtils.hasText(context.writingStyle())) {
+            prompt.append("【文风要求】\n").append(context.writingStyle().trim()).append("\n\n");
+        }
+
+        // 8. 篇幅与续写指令
+        prompt.append("【篇幅与续写指令】\n");
+        prompt.append("- 目标字数约 ").append(context.targetWordCount()).append(" 字（可合理浮动，以情节完整为准）。\n");
+        prompt.append("- 紧扣本章大纲，并与剧情背景、角色、关系、时间线、世界观及上述检索片段相协调。\n");
+        if (StringUtils.hasText(context.writingStyle())) {
+            prompt.append("- 文风须符合「文风要求」一节。\n");
+        }
+        prompt.append("- 直接输出小说正文，不要章节标题、不要作者按语。");
 
         return prompt.toString();
     }
 
-    private String buildSummarySection(List<Long> summaryIds) {
+    private String buildSummarySection(List<Long> summaryIds, boolean skipLlmCompression) {
         if (summaryIds == null || summaryIds.isEmpty()) return "";
 
         if (summaryIds.size() > MAX_SUMMARY_COUNT) {
@@ -105,6 +123,10 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
 
         if (combinedSummaries.length() <= MAX_SUMMARY_LENGTH) {
             return combinedSummaries;
+        }
+
+        if (skipLlmCompression) {
+            return combinedSummaries.substring(0, Math.min(combinedSummaries.length(), MAX_SUMMARY_LENGTH)) + "…（预览模式：已截断，正式续写时可启用模型压缩）";
         }
 
         try {
@@ -191,20 +213,36 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
                 .collect(Collectors.joining("\n"));
     }
 
-    private String buildRagSection(Long novelId, String chapterOutline) {
+    private String buildRagSection(Long novelId, String chapterOutline, String writingStyle) {
         if (chapterOutline == null || chapterOutline.isBlank()) return "";
 
+        StringBuilder query = new StringBuilder(chapterOutline.trim());
+        if (StringUtils.hasText(writingStyle)) {
+            query.append("\n【文风】").append(writingStyle.trim());
+        }
+
         try {
-            List<TextChunk> relevantChunks = embeddingService.search(novelId, chapterOutline, RAG_TOP_K);
+            List<TextChunk> relevantChunks = embeddingService.search(novelId, query.toString(), RAG_TOP_K);
             if (relevantChunks.isEmpty()) return "";
 
             return relevantChunks.stream()
-                    .map(chunk -> truncate(chunk.getChunkText(), 200))
-                    .collect(Collectors.joining("\n---\n"));
+                    .map(chunk -> "- [" + formatChunkSource(chunk.getSourceType()) + "] "
+                            + truncate(chunk.getChunkText(), 280))
+                    .collect(Collectors.joining("\n"));
         } catch (Exception e) {
             log.warn("RAG检索失败，跳过相关上下文", e);
             return "";
         }
+    }
+
+    private static String formatChunkSource(String sourceType) {
+        if (sourceType == null) return "片段";
+        return switch (sourceType) {
+            case "chapter" -> "章节正文";
+            case "summary" -> "摘要";
+            case "world_setting" -> "世界观";
+            default -> sourceType;
+        };
     }
 
     private String truncate(String text, int maxLength) {

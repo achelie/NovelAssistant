@@ -25,6 +25,10 @@ public interface ContextBuilderService {
             java.util.List<Long> worldSettingIds,
             java.util.List<Long> characterRelationIds,
             java.util.List<Long> plotTimelineIds,
-            String chapterOutline
+            String chapterOutline,
+            String writingStyle,
+            int targetWordCount,
+            /** 为 true 时摘要过长只做截断，不调用大模型压缩（用于 Prompt 预览等） */
+            boolean skipLlmCompression
     ) {}
 }
