@@ -5,6 +5,10 @@ spring:
   profiles:
     active: dev
 
+  mvc:
+    async:
+      request-timeout: 300000
+
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai

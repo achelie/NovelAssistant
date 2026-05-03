@@ -19,6 +19,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WritingServiceImpl implements WritingService {
 
+    private static final int TOKENS_PER_ROUND = 4096;
+    private static final int CONTINUATION_TAIL_CHARS = 800;
+
     private final NovelService novelService;
     private final ChapterService chapterService;
     private final ContextBuilderService contextBuilderService;
@@ -34,17 +37,55 @@ public class WritingServiceImpl implements WritingService {
         String systemPrompt = contextBuilderService.buildSystemPrompt();
         String userPrompt = contextBuilderService.buildUserPrompt(context);
 
-        int maxTokens = estimateCompletionTokens(context.targetWordCount());
-        log.info("续写请求: novelId={}, promptLength={}, maxTokens={}", request.getNovelId(), userPrompt.length(), maxTokens);
+        int targetChars = context.targetWordCount();
+        int maxRounds = targetChars <= 2000 ? 2 : 3;
 
-        return zhipuAiService.chatStream(systemPrompt, userPrompt, maxTokens);
+        log.info("续写请求: novelId={}, targetChars={}, maxRounds={}", request.getNovelId(), targetChars, maxRounds);
+
+        StringBuffer accumulated = new StringBuffer();
+        return streamRound(systemPrompt, userPrompt, accumulated, targetChars, 1, maxRounds);
     }
 
-    /**
-     * 按目标汉字数量估算 completion token（中文约 1.5～2 token/字，取 3 倍并设上下限）
-     */
-    private static int estimateCompletionTokens(int targetChineseChars) {
-        return Math.min(16384, Math.max(2048, targetChineseChars * 3));
+    private Flux<String> streamRound(String systemPrompt, String baseUserPrompt,
+                                     StringBuffer accumulated, int targetChars,
+                                     int round, int maxRounds) {
+        String userPrompt;
+        int roundTokens;
+
+        if (round == 1) {
+            userPrompt = baseUserPrompt;
+            roundTokens = TOKENS_PER_ROUND;
+        } else {
+            String tail = getTail(accumulated.toString(), CONTINUATION_TAIL_CHARS);
+            int remaining = targetChars - accumulated.length();
+            userPrompt = buildContinuationPrompt(baseUserPrompt, tail, remaining);
+            roundTokens = Math.min(TOKENS_PER_ROUND, Math.max(1024, remaining * 3));
+        }
+
+        return zhipuAiService.chatStream(systemPrompt, userPrompt, roundTokens)
+                .doOnNext(chunk -> accumulated.append(chunk))
+                .concatWith(Flux.defer(() -> {
+                    int chars = accumulated.length();
+                    log.info("第{}轮完成: 已生成{}字 / 目标{}字", round, chars, targetChars);
+                    if (chars < targetChars * 0.85 && round < maxRounds) {
+                        return streamRound(systemPrompt, baseUserPrompt, accumulated,
+                                targetChars, round + 1, maxRounds);
+                    }
+                    return Flux.empty();
+                }));
+    }
+
+    private static String buildContinuationPrompt(String baseUserPrompt, String tailText, int remainingChars) {
+        return baseUserPrompt + "\n\n" +
+                "【已完成部分的结尾】\n" + tailText + "\n\n" +
+                "【续写指令】\n" +
+                "请紧接上文继续创作，不要重复已有内容，还需写约" + remainingChars + "字。" +
+                "保持人物性格、文风和情节走向一致，直接输出续写正文，不要任何元信息或标题。";
+    }
+
+    private static String getTail(String text, int maxLen) {
+        if (text.length() <= maxLen) return text;
+        return "…" + text.substring(text.length() - maxLen);
     }
 
     @Override
