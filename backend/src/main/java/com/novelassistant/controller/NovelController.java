@@ -103,7 +103,7 @@ public class NovelController {
             throw new BusinessException(403, "无权删除他人的小说");
         }
 
-        novelService.removeById(id);
+        novelService.removeNovelCascade(id);
 
         return Result.success();
     }
