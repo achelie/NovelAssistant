@@ -526,6 +526,7 @@ function ChapterEditor({
   onCancel: () => void
 }) {
   const isEdit = state.mode === 'edit'
+  const chapterId = isEdit ? state.chapter.id : null
   const draftKey = useMemo(() => {
     if (!userId) return null
     if (!isEdit) return `novel_assistant_chapter_draft:${userId}:new`
@@ -561,6 +562,19 @@ function ChapterEditor({
   const draftWriteTimerRef = useRef<number | null>(null)
   const autoSaveTimerRef = useRef<number | null>(null)
 
+  const persistDraft = useCallback(
+    (payload: Draft) => {
+      if (!draftKey) return
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(payload))
+        setDraftExists(true)
+      } catch {
+        // ignore quota errors
+      }
+    },
+    [draftKey],
+  )
+
   // reset when switching between chapters/modes
   useEffect(() => {
     setTitle(isEdit ? state.chapter.title : '')
@@ -587,6 +601,13 @@ function ChapterEditor({
         const chapterUpdatedAt = Date.parse(state.chapter.updatedAt)
         if (!Number.isFinite(chapterUpdatedAt)) return
         if (parsed.updatedAt <= chapterUpdatedAt) return
+      }
+
+      const restore = confirm('检测到未保存草稿，是否恢复？')
+      if (!restore) {
+        localStorage.removeItem(draftKey)
+        setDraftExists(false)
+        return
       }
 
       if (typeof parsed.title === 'string') setTitle(parsed.title)
@@ -618,24 +639,18 @@ function ChapterEditor({
     if (draftWriteTimerRef.current) window.clearTimeout(draftWriteTimerRef.current)
 
     draftWriteTimerRef.current = window.setTimeout(() => {
-      try {
-        const draft: Draft = {
-          title,
-          chapterIndex,
-          content: contentJsonString,
-          updatedAt: Date.now(),
-        }
-        localStorage.setItem(draftKey, JSON.stringify(draft))
-        setDraftExists(true)
-      } catch {
-        // ignore quota errors
-      }
+      persistDraft({
+        title,
+        chapterIndex,
+        content: contentJsonString,
+        updatedAt: Date.now(),
+      })
     }, 500)
 
     return () => {
       if (draftWriteTimerRef.current) window.clearTimeout(draftWriteTimerRef.current)
     }
-  }, [chapterIndex, contentJsonString, draftKey, title])
+  }, [chapterIndex, contentJsonString, draftKey, persistDraft, title])
 
   // auto save (edit only)
   useEffect(() => {
@@ -660,18 +675,15 @@ function ChapterEditor({
         setSaveStatus('saved')
 
         // keep draft synced (or can be cleared; we choose to keep it updated)
-        if (draftKey) {
-          const draft: Draft = {
-            title: t,
-            chapterIndex,
-            content: contentJsonString,
-            updatedAt: Date.now(),
-          }
-          localStorage.setItem(draftKey, JSON.stringify(draft))
-          setDraftExists(true)
-        }
+        persistDraft({
+          title: t,
+          chapterIndex,
+          content: contentJsonString,
+          updatedAt: Date.now(),
+        })
       } catch {
         setSaveStatus('error')
+        setError('自动保存失败，请检查网络或点击“保存”重试')
       }
     }, 2500)
 
@@ -715,14 +727,12 @@ function ChapterEditor({
         localStorage.removeItem(draftKey)
         setDraftExists(false)
       } else if (draftKey) {
-        const draft: Draft = {
+        persistDraft({
           title: t,
           chapterIndex,
           content: contentJsonString,
           updatedAt: Date.now(),
-        }
-        localStorage.setItem(draftKey, JSON.stringify(draft))
-        setDraftExists(true)
+        })
       }
     } catch (e: any) {
       setError(e.message || '保存失败')
@@ -731,6 +741,35 @@ function ChapterEditor({
       setSaving(false)
     }
   }
+
+  const handleRetrySave = useCallback(async () => {
+    if (!isEdit || !chapterId) return
+    const t = title.trim()
+    const hasText = plainText.trim().length > 0
+    if (!t || !hasText) return
+
+    setError('')
+    setSaveStatus('saving')
+    try {
+      const req: UpdateChapterRequest = {
+        title: t,
+        content: contentJsonString,
+        chapterIndex,
+      }
+      await updateChapter(chapterId, req)
+      setDirty(false)
+      setSaveStatus('saved')
+      persistDraft({
+        title: t,
+        chapterIndex,
+        content: contentJsonString,
+        updatedAt: Date.now(),
+      })
+    } catch {
+      setSaveStatus('error')
+      setError('保存失败，请检查网络后重试')
+    }
+  }, [chapterId, chapterIndex, contentJsonString, isEdit, persistDraft, plainText, title])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -745,6 +784,15 @@ function ChapterEditor({
           >
             取消
           </button>
+          {isEdit && saveStatus === 'error' && (
+            <button
+              onClick={handleRetrySave}
+              disabled={saving}
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
+            >
+              重试保存
+            </button>
+          )}
           <button
             onClick={handleSubmit}
             disabled={saving}
