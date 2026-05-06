@@ -45,6 +45,20 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
         class:
           'min-h-[240px] px-4 py-3 focus:outline-none whitespace-pre-wrap break-words',
       },
+      // 点击编辑器“空白区域”（例如 min-height 留出来的空白）时，
+      // ProseMirror 默认会把光标放到文末，可能导致父容器滚动到底部。
+      // 这里拦截这种点击：只聚焦，不改变选区，从而避免滚动跳动。
+      handleClick(view, _pos, event) {
+        const e = event as MouseEvent
+        const found = view.posAtCoords({ left: e.clientX, top: e.clientY })
+        if (!found) {
+          requestAnimationFrame(() => {
+            editor?.commands.focus(undefined, { scrollIntoView: false })
+          })
+          return true
+        }
+        return false
+      },
     },
     onUpdate: ({ editor }) => {
       onChange?.({
