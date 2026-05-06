@@ -26,6 +26,7 @@ export default function ChapterPage() {
   const { user } = useAuth()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(false)
+  const chapterListScrollRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState<OpenState>({ mode: 'empty' })
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -33,6 +34,7 @@ export default function ChapterPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
 
   const fetchChapters = useCallback(async (novelId: number) => {
+    const prevScrollTop = chapterListScrollRef.current?.scrollTop ?? null
     setLoading(true)
     try {
       const res = await listChaptersByNovel(novelId)
@@ -44,6 +46,14 @@ export default function ChapterPage() {
       setChapters([])
     } finally {
       setLoading(false)
+      // 避免刷新列表导致左侧滚动位置“上下抽搐/跳回顶部”
+      if (prevScrollTop !== null) {
+        requestAnimationFrame(() => {
+          if (chapterListScrollRef.current) {
+            chapterListScrollRef.current.scrollTop = prevScrollTop
+          }
+        })
+      }
     }
   }, [])
 
@@ -280,12 +290,24 @@ export default function ChapterPage() {
               </div>
             </div>
 
-            <div className="h-[calc(100%-180px)] overflow-y-auto p-2">
-              {loading ? (
-                <div className="flex justify-center py-10">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+            <div
+              ref={chapterListScrollRef}
+              className="relative h-[calc(100%-180px)] overflow-y-auto p-2"
+            >
+              {chapters.length > 0 && (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-2 pt-2">
+                  <div
+                    className={[
+                      'inline-flex rounded-md bg-white/80 px-2 py-1 text-xs text-slate-400 shadow-sm backdrop-blur transition-opacity',
+                      loading ? 'opacity-100' : 'opacity-0',
+                    ].join(' ')}
+                    aria-live="polite"
+                  >
+                    正在刷新章节列表…
+                  </div>
                 </div>
-              ) : chapters.length === 0 ? (
+              )}
+              {chapters.length === 0 ? (
                 <div className="px-3 py-10 text-center">
                   <FileIcon className="mx-auto h-10 w-10 text-slate-300" />
                   <p className="mt-3 text-sm text-slate-400">暂无章节</p>
@@ -441,7 +463,6 @@ export default function ChapterPage() {
                 </div>
               ) : (
                 <ChapterEditorPane
-                  key={open.mode === 'create' ? 'create' : `edit:${open.chapterId}`}
                   mode={open.mode}
                   chapter={selectedChapter ?? null}
                   userId={user?.userId}
