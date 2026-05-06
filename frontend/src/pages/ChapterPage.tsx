@@ -28,6 +28,9 @@ export default function ChapterPage() {
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState<OpenState>({ mode: 'empty' })
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
 
   const fetchChapters = useCallback(async (novelId: number) => {
     setLoading(true)
@@ -46,6 +49,9 @@ export default function ChapterPage() {
 
   useEffect(() => {
     setOpen({ mode: 'empty' })
+    setSearch('')
+    setPage(1)
+    setSelectedIds(new Set())
     if (current) {
       fetchChapters(current.id)
     } else {
@@ -61,6 +67,11 @@ export default function ChapterPage() {
       if (open.mode === 'edit' && open.chapterId === id) {
         setOpen({ mode: 'empty' })
       }
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     } catch (e: any) {
       setError(e.message ?? '删除失败')
     }
@@ -129,6 +140,32 @@ export default function ChapterPage() {
   const selectedChapter = selectedId ? chapters.find((c) => c.id === selectedId) : null
   const maxIndex = chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) : 0
 
+  const PAGE_SIZE = 15
+  const normalizedSearch = search.trim().toLowerCase()
+  const searchIndex =
+    normalizedSearch && /^\d+$/.test(normalizedSearch) ? Number(normalizedSearch) : null
+
+  const filteredChapters = useMemo(() => {
+    if (!normalizedSearch) return chapters
+    return chapters.filter((ch) => {
+      const titleHit = (ch.title ?? '').toLowerCase().includes(normalizedSearch)
+      const idxHit = searchIndex != null && (ch.chapterIndex ?? -1) === searchIndex
+      return titleHit || idxHit
+    })
+  }, [chapters, normalizedSearch, searchIndex])
+
+  const totalPages = Math.max(1, Math.ceil(filteredChapters.length / PAGE_SIZE))
+  const safePage = Math.min(Math.max(1, page), totalPages)
+  const pageChapters = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return filteredChapters.slice(start, start + PAGE_SIZE)
+  }, [filteredChapters, safePage])
+
+  useEffect(() => {
+    // 搜索或过滤结果变化时，确保页码合法；搜索变化时回到第一页
+    setPage((p) => Math.min(Math.max(1, p), totalPages))
+  }, [totalPages])
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {error && (
@@ -144,36 +181,119 @@ export default function ChapterPage() {
         <div className="flex h-full">
           {/* Left: chapter list */}
           <div className="w-[360px] shrink-0 border-r border-slate-200 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold text-slate-800">
-                  章节 — {current.title}
-                </h1>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {chapters.length.toLocaleString()} 章
-                </p>
+            <div className="border-b border-slate-200 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <h1 className="truncate text-sm font-semibold text-slate-800">
+                    章节 — {current.title}
+                  </h1>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {chapters.length.toLocaleString()} 章
+                    {normalizedSearch ? ` · 匹配 ${filteredChapters.length.toLocaleString()}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowUploader(true)}
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    title="上传TXT"
+                  >
+                    上传
+                  </button>
+                  <button
+                    onClick={() => {
+                      setOpen({ mode: 'create' })
+                    }}
+                    className="rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                    title="新建章节"
+                  >
+                    新建
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setShowUploader(true)}
-                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  title="上传TXT"
-                >
-                  上传
-                </button>
-                <button
-                  onClick={() => {
-                    setOpen({ mode: 'create' })
+
+              <div className="mt-3">
+                <input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value)
+                    setPage(1)
                   }}
-                  className="rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
-                  title="新建章节"
-                >
-                  新建
-                </button>
+                  className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="搜索标题或章节序号（如 12）"
+                />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <div className="text-xs text-slate-500">
+                  已选 <span className="font-medium text-slate-700">{selectedIds.size}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev)
+                        for (const ch of pageChapters) next.add(ch.id)
+                        return next
+                      })
+                    }}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    本页全选
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev)
+                        for (const ch of pageChapters) next.delete(ch.id)
+                        return next
+                      })
+                    }}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    本页全不选
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    disabled={selectedIds.size === 0}
+                  >
+                    清空
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (selectedIds.size === 0) return
+                      if (!confirm(`确定要删除已选的 ${selectedIds.size} 个章节吗？此操作不可撤销。`)) {
+                        return
+                      }
+                      const ids = Array.from(selectedIds)
+                      try {
+                        for (const id of ids) {
+                          await deleteChapter(id)
+                        }
+                        setSelectedIds(new Set())
+                        if (open.mode === 'edit' && ids.includes(open.chapterId)) {
+                          setOpen({ mode: 'empty' })
+                        }
+                        if (current) await fetchChapters(current.id)
+                      } catch (e: any) {
+                        setError(e.message ?? '批量删除失败')
+                      }
+                    }}
+                    className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-60"
+                    disabled={selectedIds.size === 0}
+                  >
+                    批量删除
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="h-[calc(100%-49px)] overflow-y-auto p-2">
+            <div className="h-[calc(100%-180px)] overflow-y-auto p-2">
               {loading ? (
                 <div className="flex justify-center py-10">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
@@ -191,8 +311,9 @@ export default function ChapterPage() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {chapters.map((ch) => {
+                  {pageChapters.map((ch) => {
                     const isActive = open.mode === 'edit' && open.chapterId === ch.id
+                    const isChecked = selectedIds.has(ch.id)
                     return (
                       <button
                         type="button"
@@ -217,6 +338,22 @@ export default function ChapterPage() {
                         }`}
                       >
                         <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev)
+                                if (checked) next.add(ch.id)
+                                else next.delete(ch.id)
+                                return next
+                              })
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            aria-label={`选择章节 ${ch.title}`}
+                          />
                           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-medium text-slate-500">
                             {ch.chapterIndex ?? '-'}
                           </span>
@@ -249,6 +386,59 @@ export default function ChapterPage() {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Pagination */}
+            <div className="border-t border-slate-200 bg-white px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-500">
+                  第 <span className="font-medium text-slate-700">{safePage}</span> / {totalPages} 页
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage <= 1}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage >= totalPages}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    下一页
+                  </button>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      const fd = new FormData(e.currentTarget)
+                      const raw = String(fd.get('page') ?? '').trim()
+                      const n = Number(raw)
+                      if (!Number.isFinite(n)) return
+                      const target = Math.min(Math.max(1, Math.floor(n)), totalPages)
+                      setPage(target)
+                      ;(e.currentTarget as HTMLFormElement).reset()
+                    }}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      name="page"
+                      inputMode="numeric"
+                      className="w-14 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      placeholder="页码"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      跳转
+                    </button>
+                  </form>
+                </div>
+              </div>
             </div>
           </div>
 
