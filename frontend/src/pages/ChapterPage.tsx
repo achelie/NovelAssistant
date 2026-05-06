@@ -4,6 +4,7 @@ import { useNovel } from '../contexts/NovelContext'
 import {
   listChaptersByNovel,
   createChapter,
+  getChapter,
   updateChapter,
   deleteChapter,
 } from '../api/chapter'
@@ -15,18 +16,17 @@ import {
   plainTextToMinimalDoc,
 } from '../utils/chapterContent'
 
-type EditorState =
-  | { mode: 'closed' }
+type OpenState =
+  | { mode: 'empty' }
   | { mode: 'create' }
-  | { mode: 'edit'; chapter: Chapter }
-  | { mode: 'upload' }
+  | { mode: 'edit'; chapterId: number }
 
 export default function ChapterPage() {
   const { current } = useNovel()
   const { user } = useAuth()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(false)
-  const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
+  const [open, setOpen] = useState<OpenState>({ mode: 'empty' })
   const [error, setError] = useState('')
 
   const fetchChapters = useCallback(async (novelId: number) => {
@@ -45,7 +45,7 @@ export default function ChapterPage() {
   }, [])
 
   useEffect(() => {
-    setEditor({ mode: 'closed' })
+    setOpen({ mode: 'empty' })
     if (current) {
       fetchChapters(current.id)
     } else {
@@ -58,28 +58,42 @@ export default function ChapterPage() {
     try {
       await deleteChapter(id)
       if (current) fetchChapters(current.id)
-      if (editor.mode === 'edit' && editor.chapter.id === id) {
-        setEditor({ mode: 'closed' })
+      if (open.mode === 'edit' && open.chapterId === id) {
+        setOpen({ mode: 'empty' })
       }
     } catch (e: any) {
       setError(e.message ?? '删除失败')
     }
   }
 
-  const handleSave = async (title: string, content: string, chapterIndex: number) => {
-    if (editor.mode === 'create' && current) {
+  const handleSave = async (payload: {
+    mode: 'create' | 'edit'
+    chapterId?: number
+    title: string
+    content: string
+    chapterIndex: number
+  }) => {
+    if (payload.mode === 'create' && current) {
       const req: CreateChapterRequest = {
         novelId: current.id,
-        title,
-        content,
-        chapterIndex,
+        title: payload.title,
+        content: payload.content,
+        chapterIndex: payload.chapterIndex,
       }
-      await createChapter(req)
-    } else if (editor.mode === 'edit') {
-      const req: UpdateChapterRequest = { title, content, chapterIndex }
-      await updateChapter(editor.chapter.id, req)
+      const res = await createChapter(req)
+      const created = res.data
+      await fetchChapters(current.id)
+      setOpen({ mode: 'edit', chapterId: created.id })
+      return
     }
-    setEditor({ mode: 'closed' })
+    if (payload.mode === 'edit' && payload.chapterId) {
+      const req: UpdateChapterRequest = {
+        title: payload.title,
+        content: payload.content,
+        chapterIndex: payload.chapterIndex,
+      }
+      await updateChapter(payload.chapterId, req)
+    }
     if (current) fetchChapters(current.id)
   }
 
@@ -95,31 +109,25 @@ export default function ChapterPage() {
   }
 
   const handleUploadDone = () => {
-    setEditor({ mode: 'closed' })
+    setOpen({ mode: 'empty' })
     if (current) fetchChapters(current.id)
   }
 
-  if (editor.mode === 'upload') {
+  const [showUploader, setShowUploader] = useState(false)
+  if (showUploader) {
     return (
       <TxtUploader
         novelId={current.id}
         startIndex={chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) + 1 : 1}
         onDone={handleUploadDone}
-        onCancel={() => setEditor({ mode: 'closed' })}
+        onCancel={() => setShowUploader(false)}
       />
     )
   }
 
-  if (editor.mode !== 'closed') {
-    return (
-      <ChapterEditor
-        state={editor}
-        userId={user?.userId}
-        onSave={handleSave}
-        onCancel={() => setEditor({ mode: 'closed' })}
-      />
-    )
-  }
+  const selectedId = open.mode === 'edit' ? open.chapterId : null
+  const selectedChapter = selectedId ? chapters.find((c) => c.id === selectedId) : null
+  const maxIndex = chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) : 0
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -132,84 +140,145 @@ export default function ChapterPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-slate-800">
-            章节管理 — {current.title}
-          </h1>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setEditor({ mode: 'upload' })}
-              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
-            >
-              <UploadIcon className="h-4 w-4" />
-              上传TXT
-            </button>
-            <button
-              onClick={() => setEditor({ mode: 'create' })}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-            >
-              <PlusIcon className="h-4 w-4" />
-              新建章节
-            </button>
+      <div className="flex-1 overflow-hidden">
+        <div className="flex h-full">
+          {/* Left: chapter list */}
+          <div className="w-[360px] shrink-0 border-r border-slate-200 bg-white">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <h1 className="truncate text-sm font-semibold text-slate-800">
+                  章节 — {current.title}
+                </h1>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {chapters.length.toLocaleString()} 章
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowUploader(true)}
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  title="上传TXT"
+                >
+                  上传
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen({ mode: 'create' })
+                  }}
+                  className="rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                  title="新建章节"
+                >
+                  新建
+                </button>
+              </div>
+            </div>
+
+            <div className="h-[calc(100%-49px)] overflow-y-auto p-2">
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                </div>
+              ) : chapters.length === 0 ? (
+                <div className="px-3 py-10 text-center">
+                  <FileIcon className="mx-auto h-10 w-10 text-slate-300" />
+                  <p className="mt-3 text-sm text-slate-400">暂无章节</p>
+                  <button
+                    onClick={() => setOpen({ mode: 'create' })}
+                    className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    创建第一个章节
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {chapters.map((ch) => {
+                    const isActive = open.mode === 'edit' && open.chapterId === ch.id
+                    return (
+                      <button
+                        type="button"
+                        key={ch.id}
+                        onClick={async () => {
+                          setOpen({ mode: 'edit', chapterId: ch.id })
+                          // 尝试拉取最新内容（避免列表里内容不全/过旧）
+                          try {
+                            const res = await getChapter(ch.id)
+                            const full = res.data
+                            setChapters((prev) =>
+                              prev.map((p) => (p.id === ch.id ? { ...p, ...full } : p)),
+                            )
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                          isActive
+                            ? 'border-indigo-200 bg-indigo-50'
+                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-medium text-slate-500">
+                            {ch.chapterIndex ?? '-'}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-slate-800">{ch.title}</p>
+                            <p className="mt-0.5 truncate text-xs text-slate-400">
+                              {ch.content
+                                ? `${chapterContentToPlainText(ch.content).length.toLocaleString()} 字`
+                                : '无内容'}{' '}
+                              · {formatDate(ch.updatedAt)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <span
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleDeleteChapter(ch.id)
+                              }}
+                              title="删除"
+                              role="button"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: editor */}
+          <div className="flex-1 overflow-hidden bg-slate-50">
+            <div className="h-full overflow-y-auto">
+              {open.mode === 'empty' ? (
+                <div className="flex h-full items-center justify-center">
+                  <div className="text-center">
+                    <BookIcon className="mx-auto h-12 w-12 text-slate-300" />
+                    <p className="mt-3 text-sm text-slate-400">在左侧选择一个章节开始编辑</p>
+                  </div>
+                </div>
+              ) : (
+                <ChapterEditorPane
+                  key={open.mode === 'create' ? 'create' : `edit:${open.chapterId}`}
+                  mode={open.mode}
+                  chapter={selectedChapter ?? null}
+                  userId={user?.userId}
+                  defaultChapterIndex={maxIndex + 1}
+                  onSave={handleSave}
+                  onSavedRefresh={() => {
+                    if (current) fetchChapters(current.id)
+                  }}
+                  onCloseCreate={() => setOpen({ mode: 'empty' })}
+                />
+              )}
+            </div>
           </div>
         </div>
-
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          </div>
-        ) : chapters.length === 0 ? (
-          <div className="rounded-xl border-2 border-dashed border-slate-200 py-16 text-center">
-            <FileIcon className="mx-auto h-10 w-10 text-slate-300" />
-            <p className="mt-3 text-sm text-slate-400">暂无章节，创建第一个章节</p>
-            <button
-              onClick={() => setEditor({ mode: 'create' })}
-              className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              创建第一个章节
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {chapters.map((ch) => (
-              <div
-                key={ch.id}
-                className="group flex items-center rounded-lg border border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-              >
-                <span className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-medium text-slate-500">
-                  {ch.chapterIndex ?? '-'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">{ch.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-slate-400">
-                    {ch.content
-                      ? `${chapterContentToPlainText(ch.content).length.toLocaleString()} 字`
-                      : '无内容'}{' '}
-                    · 更新于{' '}
-                    {formatDate(ch.updatedAt)}
-                  </p>
-                </div>
-                <div className="ml-4 flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    onClick={() => setEditor({ mode: 'edit', chapter: ch })}
-                    className="rounded-md p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
-                    title="编辑"
-                  >
-                    <PenIcon className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteChapter(ch.id)}
-                    className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
-                    title="删除"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
@@ -514,28 +583,40 @@ function TxtUploader({
 
 /* ── Chapter Editor ── */
 
-function ChapterEditor({
-  state,
+function ChapterEditorPane({
+  mode,
+  chapter,
   userId,
+  defaultChapterIndex,
   onSave,
-  onCancel,
+  onSavedRefresh,
+  onCloseCreate,
 }: {
-  state: Extract<EditorState, { mode: 'create' } | { mode: 'edit' }>
+  mode: OpenState['mode']
+  chapter: Chapter | null
   userId?: number
-  onSave: (title: string, content: string, chapterIndex: number) => Promise<void>
-  onCancel: () => void
+  defaultChapterIndex: number
+  onSave: (payload: {
+    mode: 'create' | 'edit'
+    chapterId?: number
+    title: string
+    content: string
+    chapterIndex: number
+  }) => Promise<void>
+  onSavedRefresh: () => void
+  onCloseCreate: () => void
 }) {
-  const isEdit = state.mode === 'edit'
-  const chapterId = isEdit ? state.chapter.id : null
+  const isEdit = mode === 'edit'
+  const chapterId = isEdit ? chapter?.id ?? null : null
   const draftKey = useMemo(() => {
     if (!userId) return null
     if (!isEdit) return `novel_assistant_chapter_draft:${userId}:new`
-    return `novel_assistant_chapter_draft:${userId}:${state.chapter.id}`
-  }, [isEdit, state, userId])
+    return chapterId ? `novel_assistant_chapter_draft:${userId}:${chapterId}` : null
+  }, [chapterId, isEdit, userId])
 
   type Draft = { title: string; chapterIndex: number; content: string; updatedAt: number }
 
-  const baseContentRaw = isEdit ? (state.chapter.content ?? '') : ''
+  const baseContentRaw = isEdit ? (chapter?.content ?? '') : ''
   const basePlainText = useMemo(() => chapterContentToPlainText(baseContentRaw), [baseContentRaw])
   const baseJsonString = useMemo(() => {
     const raw = (baseContentRaw ?? '').trim()
@@ -544,11 +625,11 @@ function ChapterEditor({
     return JSON.stringify(plainTextToMinimalDoc(raw))
   }, [baseContentRaw])
 
-  const [title, setTitle] = useState(isEdit ? state.chapter.title : '')
+  const [title, setTitle] = useState(isEdit ? (chapter?.title ?? '') : '')
   const [contentJsonString, setContentJsonString] = useState(baseJsonString)
   const [plainText, setPlainText] = useState(basePlainText)
   const [chapterIndex, setChapterIndex] = useState(
-    isEdit ? (state.chapter.chapterIndex ?? 1) : 1,
+    isEdit ? (chapter?.chapterIndex ?? 1) : defaultChapterIndex,
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -575,17 +656,31 @@ function ChapterEditor({
     [draftKey],
   )
 
+  // 同步写入草稿（用于“允许切换章节但不丢稿”的卸载兜底）
+  const persistDraftSync = useCallback(
+    (payload: Draft) => {
+      if (!draftKey) return
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(payload))
+        setDraftExists(true)
+      } catch {
+        // ignore quota errors
+      }
+    },
+    [draftKey],
+  )
+
   // reset when switching between chapters/modes
   useEffect(() => {
-    setTitle(isEdit ? state.chapter.title : '')
-    setChapterIndex(isEdit ? (state.chapter.chapterIndex ?? 1) : 1)
+    setTitle(isEdit ? (chapter?.title ?? '') : '')
+    setChapterIndex(isEdit ? (chapter?.chapterIndex ?? 1) : defaultChapterIndex)
     setContentJsonString(baseJsonString)
     setPlainText(basePlainText)
     setDirty(false)
     setSaveStatus('idle')
     setError('')
     setDraftExists(false)
-  }, [baseJsonString, basePlainText, isEdit, state])
+  }, [baseJsonString, basePlainText, chapter?.chapterIndex, chapter?.title, defaultChapterIndex, isEdit])
 
   // restore draft on enter
   useEffect(() => {
@@ -598,7 +693,7 @@ function ChapterEditor({
       if (typeof parsed.updatedAt !== 'number') return
 
       if (isEdit) {
-        const chapterUpdatedAt = Date.parse(state.chapter.updatedAt)
+        const chapterUpdatedAt = Date.parse(chapter?.updatedAt ?? '')
         if (!Number.isFinite(chapterUpdatedAt)) return
         if (parsed.updatedAt <= chapterUpdatedAt) return
       }
@@ -619,7 +714,7 @@ function ChapterEditor({
     } catch {
       // ignore broken drafts
     }
-  }, [draftKey, isEdit, state])
+  }, [chapter?.updatedAt, draftKey, isEdit])
 
   const handleEditorChange = useCallback((payload: ChapterRichEditorChange) => {
     setContentJsonString(payload.jsonString)
@@ -656,6 +751,7 @@ function ChapterEditor({
   useEffect(() => {
     if (!isEdit) return
     if (!dirty) return
+    if (!chapterId) return
 
     if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = window.setTimeout(async () => {
@@ -670,7 +766,7 @@ function ChapterEditor({
           content: contentJsonString,
           chapterIndex,
         }
-        await updateChapter(state.chapter.id, req)
+        await updateChapter(chapterId, req)
         setDirty(false)
         setSaveStatus('saved')
 
@@ -690,7 +786,53 @@ function ChapterEditor({
     return () => {
       if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current)
     }
-  }, [chapterIndex, contentJsonString, dirty, draftKey, isEdit, plainText, state, title])
+  }, [chapterId, chapterIndex, contentJsonString, dirty, isEdit, persistDraft, plainText, title])
+
+  // 允许直接切换章节（A）：卸载时把当前变更写入草稿，并触发一次后台保存快照（不阻塞切换）
+  const leavingSnapshotRef = useRef<{
+    chapterId: number | null
+    dirty: boolean
+    title: string
+    chapterIndex: number
+    contentJsonString: string
+    plainText: string
+  } | null>(null)
+
+  useEffect(() => {
+    leavingSnapshotRef.current = isEdit
+      ? { chapterId, dirty, title, chapterIndex, contentJsonString, plainText }
+      : null
+  }, [chapterId, chapterIndex, contentJsonString, dirty, isEdit, plainText, title])
+
+  useEffect(() => {
+    return () => {
+      const snap = leavingSnapshotRef.current
+      if (!snap || !snap.chapterId || !snap.dirty) return
+
+      persistDraftSync({
+        title: snap.title,
+        chapterIndex: snap.chapterIndex,
+        content: snap.contentJsonString,
+        updatedAt: Date.now(),
+      })
+
+      const t = snap.title.trim()
+      const hasText = snap.plainText.trim().length > 0
+      if (!t || !hasText) return
+
+      updateChapter(snap.chapterId, {
+        title: t,
+        content: snap.contentJsonString,
+        chapterIndex: snap.chapterIndex,
+      })
+        .then(() => {
+          onSavedRefresh()
+        })
+        .catch(() => {
+          // ignore; draft is preserved
+        })
+    }
+  }, [onSavedRefresh, persistDraftSync])
 
   // beforeunload warning
   useEffect(() => {
@@ -719,13 +861,21 @@ function ChapterEditor({
     try {
       setSaveStatus('saving')
       const t = title.trim()
-      await onSave(t, contentJsonString, chapterIndex)
+      await onSave({
+        mode: isEdit ? 'edit' : 'create',
+        chapterId: chapterId ?? undefined,
+        title: t,
+        content: contentJsonString,
+        chapterIndex,
+      })
       setDirty(false)
       setSaveStatus('saved')
+      onSavedRefresh()
 
       if (draftKey && !isEdit) {
         localStorage.removeItem(draftKey)
         setDraftExists(false)
+        onCloseCreate()
       } else if (draftKey) {
         persistDraft({
           title: t,
@@ -775,15 +925,17 @@ function ChapterEditor({
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3">
         <h2 className="text-sm font-semibold text-slate-700">
-          {isEdit ? '编辑章节' : '新建章节'}
+          {isEdit ? '章节编辑' : '新建章节'}
         </h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onCancel}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            取消
-          </button>
+          {!isEdit && (
+            <button
+              onClick={onCloseCreate}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              关闭
+            </button>
+          )}
           {isEdit && saveStatus === 'error' && (
             <button
               onClick={handleRetrySave}
@@ -880,26 +1032,10 @@ function formatDate(iso: string): string {
 
 /* ── Icons ── */
 
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  )
-}
-
 function TrashIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-    </svg>
-  )
-}
-
-function PenIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
     </svg>
   )
 }
