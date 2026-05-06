@@ -32,6 +32,7 @@ export default function ChapterPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
+  const [showUploader, setShowUploader] = useState(false)
 
   const fetchChapters = useCallback(async (novelId: number) => {
     const prevScrollTop = chapterListScrollRef.current?.scrollTop ?? null
@@ -118,32 +119,9 @@ export default function ChapterPage() {
     if (current) fetchChapters(current.id)
   }
 
-  if (!current) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <BookIcon className="mx-auto h-12 w-12 text-slate-300" />
-          <p className="mt-3 text-sm text-slate-400">请先在左侧选择一本小说</p>
-        </div>
-      </div>
-    )
-  }
-
   const handleUploadDone = () => {
     setOpen({ mode: 'empty' })
     if (current) fetchChapters(current.id)
-  }
-
-  const [showUploader, setShowUploader] = useState(false)
-  if (showUploader) {
-    return (
-      <TxtUploader
-        novelId={current.id}
-        startIndex={chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) + 1 : 1}
-        onDone={handleUploadDone}
-        onCancel={() => setShowUploader(false)}
-      />
-    )
   }
 
   const selectedId = open.mode === 'edit' ? open.chapterId : null
@@ -177,6 +155,21 @@ export default function ChapterPage() {
   }, [totalPages])
 
   return (
+    showUploader && current ? (
+      <TxtUploader
+        novelId={current.id}
+        startIndex={chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) + 1 : 1}
+        onDone={handleUploadDone}
+        onCancel={() => setShowUploader(false)}
+      />
+    ) : !current ? (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <BookIcon className="mx-auto h-12 w-12 text-slate-300" />
+          <p className="mt-3 text-sm text-slate-400">请先在左侧选择一本小说</p>
+        </div>
+      </div>
+    ) : (
     <div className="flex h-full flex-col overflow-hidden">
       {error && (
         <div className="mx-6 mt-4 flex items-center justify-between rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -479,6 +472,7 @@ export default function ChapterPage() {
         </div>
       </div>
     </div>
+    )
   )
 }
 

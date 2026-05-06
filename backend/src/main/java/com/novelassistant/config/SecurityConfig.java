@@ -33,7 +33,17 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/health").permitAll()
                 .requestMatchers("/health").permitAll()
-                .anyRequest().authenticated()
+                // 前端 SPA（React Router）刷新深链接会直接 GET /chapters 等路径；
+                // 这些都是静态资源/前端路由，应放行，由前端自己做登录态保护。
+                .requestMatchers(
+                    "/", "/index.html",
+                    "/assets/**",
+                    "/*.js", "/*.css", "/*.map",
+                    "/favicon.ico", "/vite.svg"
+                ).permitAll()
+                // 仅保护 API
+                .requestMatchers("/api/**").authenticated()
+                .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
