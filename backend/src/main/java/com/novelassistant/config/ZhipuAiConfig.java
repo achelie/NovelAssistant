@@ -30,8 +30,9 @@ public class ZhipuAiConfig {
     @Bean("zhipuWebClient")
     public WebClient zhipuWebClient() {
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 15_000)
-                .responseTimeout(Duration.ofMinutes(5));
+                // AI 生成耗时较长，超时策略按原值上调 10 倍
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 150_000)
+                .responseTimeout(Duration.ofMinutes(50));
 
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))

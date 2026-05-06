@@ -27,6 +27,11 @@ export function deleteSummary(id: number) {
   return request.delete<any, ApiResult<void>>(`/summary/${id}`)
 }
 
+export function batchDeleteSummaries(data: { novelId: number; summaryIds: number[] }) {
+  return request.post<any, ApiResult<void>>('/summary/batch-delete', data)
+}
+
 export function generateSummary(data: GenerateSummaryRequest) {
-  return request.post<any, ApiResult<Summary[]>>('/summary/generate', data)
+  // AI 生成可能较慢：等待超时上调 10 倍
+  return request.post<any, ApiResult<Summary[]>>('/summary/generate', data, { timeout: 300000 })
 }

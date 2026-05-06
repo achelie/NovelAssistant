@@ -21,6 +21,11 @@ public interface EmbeddingService {
     void removeBySource(String sourceType, Long sourceId);
 
     /**
+     * 批量删除指定来源的分块（用于批量删除/批量更新）
+     */
+    void removeBySourceIds(String sourceType, List<Long> sourceIds);
+
+    /**
      * 根据查询文本在指定小说中检索最相关的 topK 个文本块
      */
     List<TextChunk> search(Long novelId, String queryText, int topK);

@@ -5,6 +5,7 @@ import {
   createSummary,
   updateSummary,
   deleteSummary,
+  batchDeleteSummaries,
   generateSummary,
 } from '../api/summary'
 import { listChaptersByNovel } from '../api/chapter'
@@ -38,6 +39,11 @@ export default function SummaryPage() {
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
   const [genTitle, setGenTitle] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [genProgress, setGenProgress] = useState<{ doneBatches: number; totalBatches: number }>({
+    doneBatches: 0,
+    totalBatches: 0,
+  })
+  const [genChapterPage, setGenChapterPage] = useState(1)
 
   const fetchSummaries = useCallback(async (novelId: number) => {
     const prevScrollTop = summaryListScrollRef.current?.scrollTop ?? null
@@ -130,8 +136,16 @@ export default function SummaryPage() {
     if (open.mode === 'generate') {
       setSelectedChapterIds([])
       setGenTitle('')
+      setGenProgress({ doneBatches: 0, totalBatches: 0 })
+      setGenChapterPage(1)
     }
   }, [open, summaries, maxIndex])
+
+  const chunk = useCallback(<T,>(arr: T[], size: number): T[][] => {
+    const out: T[][] = []
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+    return out
+  }, [])
 
   const handleSave = async () => {
     if (!formTitle.trim()) return
@@ -188,9 +202,7 @@ export default function SummaryPage() {
     if (!confirm(`确定要删除已选的 ${selectedIds.size} 条摘要吗？`)) return
     setError('')
     try {
-      for (const id of selectedIds) {
-        await deleteSummary(id)
-      }
+      await batchDeleteSummaries({ novelId: current!.id, summaryIds: Array.from(selectedIds) })
       setSelectedIds(new Set())
       if (current) await fetchSummaries(current.id)
       if (open.mode === 'edit' && selectedSummaryId && selectedIds.has(selectedSummaryId)) {
@@ -201,18 +213,41 @@ export default function SummaryPage() {
     }
   }
 
+  const GEN_PAGE_SIZE = 30
+  const totalGenChapterPages = Math.max(1, Math.ceil(chapters.length / GEN_PAGE_SIZE))
+  const safeGenChapterPage = Math.min(Math.max(1, genChapterPage), totalGenChapterPages)
+  const genPageChapters = useMemo(() => {
+    const start = (safeGenChapterPage - 1) * GEN_PAGE_SIZE
+    return chapters.slice(start, start + GEN_PAGE_SIZE)
+  }, [chapters, safeGenChapterPage])
+  const genPageChapterIdSet = useMemo(() => new Set(genPageChapters.map((c) => c.id)), [genPageChapters])
+
+  useEffect(() => {
+    setGenChapterPage((p) => Math.min(Math.max(1, p), totalGenChapterPages))
+  }, [totalGenChapterPages])
+
+  // 不能跨页勾选：翻页即清空选择
+  useEffect(() => {
+    if (open.mode === 'generate') {
+      setSelectedChapterIds([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeGenChapterPage])
+
   const toggleChapter = (id: number) => {
-    setSelectedChapterIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
+    // 只允许勾选当前页；最多30条（即一页）
+    if (!genPageChapterIdSet.has(id)) return
+    setSelectedChapterIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= GEN_PAGE_SIZE) return prev
+      return [...prev, id]
+    })
   }
 
   const selectAllChapters = () => {
-    if (selectedChapterIds.length === chapters.length) {
-      setSelectedChapterIds([])
-    } else {
-      setSelectedChapterIds(chapters.map((ch) => ch.id))
-    }
+    const pageIds = genPageChapters.map((ch) => ch.id)
+    const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedChapterIds.includes(id))
+    setSelectedChapterIds(allOnPageSelected ? [] : pageIds.slice(0, GEN_PAGE_SIZE))
   }
 
   const handleGenerate = async () => {
@@ -220,11 +255,24 @@ export default function SummaryPage() {
     setGenerating(true)
     setError('')
     try {
-      await generateSummary({
-        novelId: current.id,
-        chapterIds: selectedChapterIds,
-        title: genTitle.trim() || undefined,
-      })
+      // 按 chapterIndex 排序后每10章一批请求，便于做进度提示
+      const idToIndex = new Map<number, number>()
+      for (const ch of chapters) idToIndex.set(ch.id, ch.chapterIndex ?? 0)
+      const sortedIds = [...selectedChapterIds].sort(
+        (a, b) => (idToIndex.get(a) ?? 0) - (idToIndex.get(b) ?? 0),
+      )
+      const batches = chunk(sortedIds, 5)
+      setGenProgress({ doneBatches: 0, totalBatches: batches.length })
+
+      for (let i = 0; i < batches.length; i++) {
+        await generateSummary({
+          novelId: current.id,
+          chapterIds: batches[i],
+          title: genTitle.trim() || undefined,
+        })
+        setGenProgress({ doneBatches: i + 1, totalBatches: batches.length })
+      }
+
       await fetchSummaries(current.id)
       setOpen({ mode: 'empty' })
     } catch (e: any) {
@@ -595,14 +643,17 @@ export default function SummaryPage() {
 
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-slate-700">
-                            选择章节（已选 {selectedChapterIds.length}/{chapters.length}）
+                            选择章节（已选 {selectedChapterIds.length}/{Math.min(GEN_PAGE_SIZE, genPageChapters.length)}）
                           </span>
                           <button
                             onClick={selectAllChapters}
                             className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                             type="button"
                           >
-                            {selectedChapterIds.length === chapters.length ? '取消全选' : '全选'}
+                            {genPageChapters.length > 0 &&
+                            genPageChapters.every((ch) => selectedChapterIds.includes(ch.id))
+                              ? '取消全选'
+                              : '本页全选'}
                           </button>
                         </div>
 
@@ -612,7 +663,7 @@ export default function SummaryPage() {
                               暂无章节，请先创建章节
                             </p>
                           ) : (
-                            chapters.map((ch) => (
+                            genPageChapters.map((ch) => (
                               <label
                                 key={ch.id}
                                 className={`flex cursor-pointer items-center rounded-md px-3 py-2 transition-colors ${
@@ -636,12 +687,39 @@ export default function SummaryPage() {
                           )}
                         </div>
 
+                        {/* chapter picker pagination */}
+                        <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
+                          <span>
+                            第 <span className="font-medium text-slate-700">{safeGenChapterPage}</span> / {totalGenChapterPages} 页
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setGenChapterPage((p) => Math.max(1, p - 1))}
+                              disabled={safeGenChapterPage <= 1 || generating}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              上一页
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setGenChapterPage((p) => Math.min(totalGenChapterPages, p + 1))}
+                              disabled={safeGenChapterPage >= totalGenChapterPages || generating}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              下一页
+                            </button>
+                          </div>
+                        </div>
+
                         {generating && (
                           <div className="flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-600">
                             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
-                            {selectedChapterIds.length > 1
-                              ? `正在为所选 ${selectedChapterIds.length} 章依次各生成一条摘要，请稍候…`
-                              : 'AI 正在分析章节内容并生成摘要，请稍候…'}
+                            {genProgress.totalBatches > 0
+                              ? `正在生成摘要：已完成 ${genProgress.doneBatches}/${genProgress.totalBatches} 批（共 ${selectedChapterIds.length} 章）…`
+                              : selectedChapterIds.length > 1
+                                ? `正在为所选 ${selectedChapterIds.length} 章生成摘要，请稍候…`
+                                : 'AI 正在分析章节内容并生成摘要，请稍候…'}
                           </div>
                         )}
                       </div>

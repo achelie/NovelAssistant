@@ -59,6 +59,15 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     }
 
     @Override
+    @Transactional
+    public void removeBySourceIds(String sourceType, List<Long> sourceIds) {
+        if (sourceIds == null || sourceIds.isEmpty()) return;
+        textChunkMapper.delete(new LambdaQueryWrapper<TextChunk>()
+                .eq(TextChunk::getSourceType, sourceType)
+                .in(TextChunk::getSourceId, sourceIds));
+    }
+
+    @Override
     public List<TextChunk> search(Long novelId, String queryText, int topK) {
         float[] queryEmbedding = zhipuAiService.embed(queryText);
 
