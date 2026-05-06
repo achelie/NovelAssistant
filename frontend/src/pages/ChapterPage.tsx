@@ -150,7 +150,7 @@ export default function ChapterPage() {
   const selectedChapter = selectedId ? chapters.find((c) => c.id === selectedId) : null
   const maxIndex = chapters.length > 0 ? Math.max(...chapters.map((c) => c.chapterIndex)) : 0
 
-  const PAGE_SIZE = 15
+  const PAGE_SIZE = 20
   const normalizedSearch = search.trim().toLowerCase()
   const searchIndex =
     normalizedSearch && /^\d+$/.test(normalizedSearch) ? Number(normalizedSearch) : null

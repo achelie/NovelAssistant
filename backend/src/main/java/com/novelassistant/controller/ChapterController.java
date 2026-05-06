@@ -42,6 +42,9 @@ public class ChapterController {
         if (!novel.getUserId().equals(userId)) {
             throw new BusinessException(403, "无权在他人的小说下创建章节");
         }
+        if (chapterService.existsChapterIndex(request.getNovelId(), request.getChapterIndex(), null)) {
+            throw new BusinessException(400, "章节序号已存在，请换一个序号");
+        }
 
         Chapter chapter = new Chapter();
         chapter.setNovelId(request.getNovelId());
@@ -108,6 +111,9 @@ public class ChapterController {
             chapter.setContent(request.getContent());
         }
         if (request.getChapterIndex() != null) {
+            if (chapterService.existsChapterIndex(chapter.getNovelId(), request.getChapterIndex(), chapter.getId())) {
+                throw new BusinessException(400, "章节序号已存在，请换一个序号");
+            }
             chapter.setChapterIndex(request.getChapterIndex());
         }
 

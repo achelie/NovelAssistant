@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS `chapter` (
     `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_novel_id` (`novel_id`)
+    KEY `idx_novel_id` (`novel_id`),
+    UNIQUE KEY `uk_novel_chapter_index` (`novel_id`, `chapter_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='章节表';
 
 -- 角色表（避免与 MySQL 关键字冲突，使用 character_info）

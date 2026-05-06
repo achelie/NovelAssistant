@@ -48,4 +48,16 @@ public class ChapterServiceImpl extends ServiceImpl<ChapterMapper, Chapter> impl
 
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), result.getRecords());
     }
+
+    @Override
+    public boolean existsChapterIndex(Long novelId, Integer chapterIndex, Long excludeId) {
+        if (novelId == null || chapterIndex == null) return false;
+        LambdaQueryWrapper<Chapter> w = new LambdaQueryWrapper<Chapter>()
+                .eq(Chapter::getNovelId, novelId)
+                .eq(Chapter::getChapterIndex, chapterIndex);
+        if (excludeId != null) {
+            w.ne(Chapter::getId, excludeId);
+        }
+        return exists(w);
+    }
 }
