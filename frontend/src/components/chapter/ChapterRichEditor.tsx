@@ -32,6 +32,25 @@ function toDoc(raw: string | null | undefined): PMJSON {
 export function ChapterRichEditor({ initialContent, onChange, className }: ChapterRichEditorProps) {
   const initialDoc = useMemo(() => toDoc(initialContent), [initialContent])
   const lastAppliedDocStringRef = useRef<string>(JSON.stringify(initialDoc))
+  const lastInteractionRef = useRef<'mouse' | 'keyboard' | 'programmatic'>('programmatic')
+  const clickScrollRestoreRef = useRef<{ el: HTMLElement; top: number } | null>(null)
+
+  const captureScrollForRestore = (startEl: HTMLElement) => {
+    let el: HTMLElement | null = startEl
+    while (el) {
+      const style = window.getComputedStyle(el)
+      const overflowY = style.overflowY
+      const canScrollY =
+        (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+        el.scrollHeight > el.clientHeight + 1
+      if (canScrollY) {
+        clickScrollRestoreRef.current = { el, top: el.scrollTop }
+        return
+      }
+      el = el.parentElement
+    }
+    clickScrollRestoreRef.current = null
+  }
 
   const editor = useEditor({
     extensions: [
@@ -45,19 +64,45 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
         class:
           'min-h-[240px] px-4 py-3 focus:outline-none whitespace-pre-wrap break-words',
       },
+      handleKeyDown() {
+        lastInteractionRef.current = 'keyboard'
+        return false
+      },
+      handleDOMEvents: {
+        mousedown(view) {
+          lastInteractionRef.current = 'mouse'
+          captureScrollForRestore(view.dom as HTMLElement)
+          return false
+        },
+      },
       // 点击编辑器“空白区域”（例如 min-height 留出来的空白）时，
       // ProseMirror 默认会把光标放到文末，可能导致父容器滚动到底部。
       // 这里拦截这种点击：只聚焦，不改变选区，从而避免滚动跳动。
       handleClick(view, _pos, event) {
+        lastInteractionRef.current = 'mouse'
         const e = event as MouseEvent
-        const found = view.posAtCoords({ left: e.clientX, top: e.clientY })
-        if (!found) {
+
+        // 注意：点在编辑器底部留白时，posAtCoords 依然可能返回“文末位置”，
+        // 导致选区跳到最后一行并触发滚动。这里用“是否点在最后一行下面”来判定留白点击。
+        const endPos = view.state.doc.content.size
+        const endCoords = view.coordsAtPos(endPos)
+        const isBelowLastLine = e.clientY > endCoords.bottom + 2
+        if (!isBelowLastLine) {
+          // 正常点击文本时，也不要让任何“自动滚动到选区”的行为改变滚动位置
           requestAnimationFrame(() => {
-            editor?.commands.focus(undefined, { scrollIntoView: false })
+            const snap = clickScrollRestoreRef.current
+            if (snap) snap.el.scrollTop = snap.top
           })
-          return true
+          return false
         }
-        return false
+
+        requestAnimationFrame(() => {
+          lastInteractionRef.current = 'programmatic'
+          editor?.commands.focus(undefined, { scrollIntoView: false })
+          const snap = clickScrollRestoreRef.current
+          if (snap) snap.el.scrollTop = snap.top
+        })
+        return true
       },
     },
     onUpdate: ({ editor }) => {
@@ -83,6 +128,7 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
 
     if (wasFocused) {
       requestAnimationFrame(() => {
+        lastInteractionRef.current = 'programmatic'
         editor.commands.focus(undefined, { scrollIntoView: false })
       })
     }
