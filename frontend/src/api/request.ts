@@ -26,6 +26,7 @@ request.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  ;(config as any).__tokenUsed = token
   return config
 })
 
@@ -39,8 +40,13 @@ request.interceptors.response.use(
   },
   (err) => {
     if (err.response?.status === 401) {
-      removeToken()
-      window.location.href = '/login'
+      const tokenUsed: string | null | undefined = (err.config as any)?.__tokenUsed
+      const current = getToken()
+      // 避免“旧会话的 401”把新登录的 token 清掉
+      if (!tokenUsed || tokenUsed === current) {
+        removeToken()
+        window.location.href = '/login'
+      }
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
     const msg = err.response?.data?.message || err.message || '网络请求失败'

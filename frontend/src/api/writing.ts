@@ -26,8 +26,11 @@ export async function consumeWritingGenerateStream(
   })
 
   if (res.status === 401) {
-    localStorage.removeItem('novel_assistant_token')
-    window.location.href = '/login'
+    // 避免“旧会话的 401”把新登录的 token 清掉
+    if (!auth || getToken() === auth) {
+      localStorage.removeItem('novel_assistant_token')
+      window.location.href = '/login'
+    }
     throw new Error('登录已过期，请重新登录')
   }
 

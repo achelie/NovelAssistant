@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import type { Novel } from '../types'
 import { listNovels, createNovel, deleteNovel, updateNovel } from '../api/novel'
 import type { CreateNovelRequest, UpdateNovelRequest } from '../types'
+import { useAuth } from './AuthContext'
 
 interface NovelContextValue {
   novels: Novel[]
@@ -26,7 +27,12 @@ const NovelContext = createContext<NovelContextValue | null>(null)
 
 const STORAGE_KEY = 'novel_assistant_current_novel_id'
 
+function keyForUser(userId: number | undefined | null) {
+  return userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY
+}
+
 export function NovelProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
   const [novels, setNovels] = useState<Novel[]>([])
   const [current, setCurrent] = useState<Novel | null>(null)
   const [loading, setLoading] = useState(true)
@@ -44,24 +50,35 @@ export function NovelProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     ;(async () => {
+      // 换账号时立刻清空，避免继续用旧 novelId 发请求
+      setCurrent(null)
+      setLoading(true)
+
+      if (!user) {
+        setNovels([])
+        setLoading(false)
+        return
+      }
+
       const list = await fetchNovels()
-      const savedId = localStorage.getItem(STORAGE_KEY)
+      const savedId = localStorage.getItem(keyForUser(user.userId))
       if (savedId) {
         const found = list.find((n) => n.id === Number(savedId))
         if (found) setCurrent(found)
       }
       setLoading(false)
     })()
-  }, [fetchNovels])
+  }, [fetchNovels, user?.userId])
 
   const select = useCallback((novel: Novel | null) => {
     setCurrent(novel)
+    const storageKey = keyForUser(user?.userId)
     if (novel) {
-      localStorage.setItem(STORAGE_KEY, String(novel.id))
+      localStorage.setItem(storageKey, String(novel.id))
     } else {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(storageKey)
     }
-  }, [])
+  }, [user?.userId])
 
   const refresh = useCallback(async () => {
     const list = await fetchNovels()
@@ -76,9 +93,9 @@ export function NovelProvider({ children }: { children: ReactNode }) {
     const novel = res.data
     await fetchNovels()
     setCurrent(novel)
-    localStorage.setItem(STORAGE_KEY, String(novel.id))
+    localStorage.setItem(keyForUser(user?.userId), String(novel.id))
     return novel
-  }, [fetchNovels])
+  }, [fetchNovels, user?.userId])
 
   const edit = useCallback(async (id: number, data: UpdateNovelRequest) => {
     await updateNovel(id, data)
@@ -91,10 +108,10 @@ export function NovelProvider({ children }: { children: ReactNode }) {
     await deleteNovel(id)
     if (current?.id === id) {
       setCurrent(null)
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(keyForUser(user?.userId))
     }
     await fetchNovels()
-  }, [fetchNovels, current])
+  }, [fetchNovels, current, user?.userId])
 
   const value = useMemo(
     () => ({ novels, current, loading, select, refresh, add, edit, remove }),
