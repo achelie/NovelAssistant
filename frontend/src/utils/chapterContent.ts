@@ -60,12 +60,18 @@ export function extractReadableTextFromPM(node: PMJSON | null | undefined): stri
   return inner
 }
 
+export function isPMJSON(value: unknown): value is PMJSON {
+  if (!value || typeof value !== 'object') return false
+  const v = value as PMJSON
+  return v.type === 'doc' && Array.isArray(v.content)
+}
+
 export function chapterContentToPlainText(raw: string | null | undefined): string {
   if (!raw) return ''
-  const parsed = tryParseJson<PMJSON>(raw)
-  if (parsed) return extractPlainTextFromPM(parsed)
+  const parsed = tryParseJson<unknown>(raw)
+  if (isPMJSON(parsed)) return extractPlainTextFromPM(parsed).trimEnd()
   // 旧纯文本直接返回
-  return raw
+  return raw.trimEnd()
 }
 
 export function plainTextToMinimalDoc(text: string): PMJSON {
