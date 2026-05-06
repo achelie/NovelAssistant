@@ -244,19 +244,6 @@ export default function ChapterPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedIds((prev) => {
-                        const next = new Set(prev)
-                        for (const ch of pageChapters) next.delete(ch.id)
-                        return next
-                      })
-                    }}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    本页全不选
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setSelectedIds(new Set())}
                     className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                     disabled={selectedIds.size === 0}
