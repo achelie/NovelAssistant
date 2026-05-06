@@ -21,6 +21,7 @@ import com.novelassistant.service.NovelService;
 import com.novelassistant.service.PlotTimelineService;
 import com.novelassistant.service.SummaryService;
 import com.novelassistant.service.WorldSettingService;
+import com.novelassistant.util.ProseMirrorTextUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,5 +81,24 @@ public class NovelServiceImpl extends ServiceImpl<NovelMapper, Novel> implements
         textChunkMapper.delete(new LambdaQueryWrapper<TextChunk>().eq(TextChunk::getNovelId, novelId));
 
         return super.removeById(novelId);
+    }
+
+    @Override
+    @Transactional
+    public void recalcWordCount(Long novelId) {
+        if (novelId == null) return;
+        Novel novel = getById(novelId);
+        if (novel == null) return;
+
+        List<Chapter> chapters = chapterService.listByNovelId(novelId);
+        int sum = 0;
+        for (Chapter ch : chapters) {
+            sum += ProseMirrorTextUtil.countChars(ch.getContent());
+        }
+
+        Novel toUpdate = new Novel();
+        toUpdate.setId(novelId);
+        toUpdate.setWordCount(sum);
+        updateById(toUpdate);
     }
 }

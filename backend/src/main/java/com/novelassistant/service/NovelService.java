@@ -16,4 +16,9 @@ public interface NovelService extends IService<Novel> {
      * 删除小说并清理其下所有关联数据，避免产生孤儿数据。
      */
     boolean removeNovelCascade(Long novelId);
+
+    /**
+     * 重新计算并更新小说字数（按章节内容提取后的字符数求和）。
+     */
+    void recalcWordCount(Long novelId);
 }

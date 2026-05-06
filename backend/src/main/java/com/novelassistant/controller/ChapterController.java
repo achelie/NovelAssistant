@@ -53,6 +53,7 @@ public class ChapterController {
         chapter.setChapterIndex(request.getChapterIndex());
 
         chapterService.save(chapter);
+        novelService.recalcWordCount(chapter.getNovelId());
 
         asyncIndex("chapter", chapter.getId(), chapter.getNovelId(), chapter.getContent());
 
@@ -118,6 +119,7 @@ public class ChapterController {
         }
 
         chapterService.updateById(chapter);
+        novelService.recalcWordCount(chapter.getNovelId());
 
         asyncIndex("chapter", chapter.getId(), chapter.getNovelId(), chapter.getContent());
 
@@ -135,7 +137,9 @@ public class ChapterController {
         checkOwnership(chapter, userId);
 
         embeddingService.removeBySource("chapter", id);
+        Long novelId = chapter.getNovelId();
         chapterService.removeById(id);
+        novelService.recalcWordCount(novelId);
 
         return Result.success();
     }
