@@ -59,6 +59,8 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
 
     const nextDoc = toDoc(initialContent)
     const nextDocString = JSON.stringify(nextDoc)
+    const currentDocString = JSON.stringify(editor.getJSON())
+    if (nextDocString === currentDocString) return
     if (nextDocString === lastAppliedDocStringRef.current) return
 
     const wasFocused = editor.isFocused
