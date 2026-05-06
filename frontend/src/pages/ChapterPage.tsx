@@ -685,6 +685,17 @@ function ChapterEditorPane({
   // restore draft on enter
   useEffect(() => {
     if (!draftKey) return
+    // React StrictMode(dev) 下 effect 可能触发两次；避免重复恢复导致“弹两次/状态抖动”
+    // 这里我们改为静默恢复，因此主要是避免重复 setState。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const didRestoreDraftRef = useRef(false)
+
+  useEffect(() => {
+    if (!draftKey) return
+    if (didRestoreDraftRef.current) return
+    didRestoreDraftRef.current = true
     try {
       const raw = localStorage.getItem(draftKey)
       if (!raw) return
@@ -698,23 +709,29 @@ function ChapterEditorPane({
         if (parsed.updatedAt <= chapterUpdatedAt) return
       }
 
-      const restore = confirm('检测到未保存草稿，是否恢复？')
-      if (!restore) {
-        localStorage.removeItem(draftKey)
-        setDraftExists(false)
-        return
-      }
+      // 默认静默恢复：仅当草稿内容确实不同才覆盖并标记为 dirty，避免“啥也没改一切换就提示/标脏”
+      const nextTitle = typeof parsed.title === 'string' ? parsed.title : title
+      const nextIndex = typeof parsed.chapterIndex === 'number' ? parsed.chapterIndex : chapterIndex
+      const nextContent = typeof parsed.content === 'string' ? parsed.content : contentJsonString
 
-      if (typeof parsed.title === 'string') setTitle(parsed.title)
-      if (typeof parsed.chapterIndex === 'number') setChapterIndex(parsed.chapterIndex)
-      if (typeof parsed.content === 'string') setContentJsonString(parsed.content)
-      setDraftExists(true)
-      setDirty(true)
-      setSaveStatus('unsaved')
+      const differs =
+        nextTitle !== title || nextIndex !== chapterIndex || nextContent !== contentJsonString
+
+      if (differs) {
+        setTitle(nextTitle)
+        setChapterIndex(nextIndex)
+        setContentJsonString(nextContent)
+        setDraftExists(true)
+        setDirty(true)
+        setSaveStatus('unsaved')
+      } else {
+        // 草稿与当前一致：只记录草稿存在即可，不标脏
+        setDraftExists(true)
+      }
     } catch {
       // ignore broken drafts
     }
-  }, [chapter?.updatedAt, draftKey, isEdit])
+  }, [chapter?.updatedAt, chapterIndex, contentJsonString, draftKey, isEdit, title])
 
   const handleEditorChange = useCallback((payload: ChapterRichEditorChange) => {
     setContentJsonString(payload.jsonString)
