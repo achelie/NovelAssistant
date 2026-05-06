@@ -82,27 +82,44 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
         lastInteractionRef.current = 'mouse'
         const e = event as MouseEvent
 
+        const restoreScroll = () => {
+          const snap = clickScrollRestoreRef.current
+          if (snap) snap.el.scrollTop = snap.top
+        }
+
         // 注意：点在编辑器底部留白时，posAtCoords 依然可能返回“文末位置”，
         // 导致选区跳到最后一行并触发滚动。这里用“是否点在最后一行下面”来判定留白点击。
         const endPos = view.state.doc.content.size
         const endCoords = view.coordsAtPos(endPos)
         const isBelowLastLine = e.clientY > endCoords.bottom + 2
-        if (!isBelowLastLine) {
-          // 正常点击文本时，也不要让任何“自动滚动到选区”的行为改变滚动位置
+        const found = view.posAtCoords({ left: e.clientX, top: e.clientY })
+        const isRightOfLineEnd = (() => {
+          if (!found) return false
+          try {
+            const c = view.coordsAtPos(found.pos)
+            return e.clientX > c.right + 6
+          } catch {
+            return false
+          }
+        })()
+
+        // 点在“行尾右侧空白 / 最后一行下方空白”时：
+        // - 明确折叠选区（取消选中）
+        // - 聚焦但不滚动
+        if (isBelowLastLine || isRightOfLineEnd) {
+          const targetPos = isBelowLastLine ? endPos : (found?.pos ?? endPos)
           requestAnimationFrame(() => {
-            const snap = clickScrollRestoreRef.current
-            if (snap) snap.el.scrollTop = snap.top
+            lastInteractionRef.current = 'programmatic'
+            editor?.commands.setTextSelection(targetPos)
+            editor?.commands.focus(undefined, { scrollIntoView: false })
+            restoreScroll()
           })
-          return false
+          return true
         }
 
-        requestAnimationFrame(() => {
-          lastInteractionRef.current = 'programmatic'
-          editor?.commands.focus(undefined, { scrollIntoView: false })
-          const snap = clickScrollRestoreRef.current
-          if (snap) snap.el.scrollTop = snap.top
-        })
-        return true
+        // 正常点击文本时，也不要让任何“自动滚动到选区”的行为改变滚动位置
+        requestAnimationFrame(restoreScroll)
+        return false
       },
     },
     onUpdate: ({ editor }) => {
