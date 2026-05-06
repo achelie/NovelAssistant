@@ -10,3 +10,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.iml
+
+# git worktrees (local)
+.worktrees/
+worktrees/
