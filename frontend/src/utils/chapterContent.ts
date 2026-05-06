@@ -31,6 +31,24 @@ export function extractPlainTextFromPM(node: PMJSON | null | undefined): string 
 
   const inner = children.map(extractPlainTextFromPM).join('')
 
+  return inner
+}
+
+/**
+ * 可读文本（带段落分隔）。仅用于展示，不要用于字数统计。
+ */
+export function extractReadableTextFromPM(node: PMJSON | null | undefined): string {
+  if (!node) return ''
+
+  if (node.type === 'hardBreak') return '\n'
+
+  if (typeof node.text === 'string') return node.text
+
+  const children = node.content ?? []
+  if (!Array.isArray(children) || children.length === 0) return ''
+
+  const inner = children.map(extractReadableTextFromPM).join('')
+
   if (node.type === 'paragraph' || node.type === 'heading') {
     return `${inner}\n\n`
   }
