@@ -1,8 +1,40 @@
+import { Extension } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { Plugin, TextSelection } from 'prosemirror-state'
 import { useEffect, useMemo, useRef } from 'react'
 
 import { plainTextToMinimalDoc, type PMJSON, tryParseJson } from '../../utils/chapterContent'
+
+let lastInteractionGlobal: 'mouse' | 'keyboard' | 'programmatic' = 'programmatic'
+let lastEditorMouseDownAt = 0
+
+const PreventMouseAppendEmptyParagraph = Extension.create({
+  name: 'preventMouseAppendEmptyParagraph',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        filterTransaction: (tr, state) => {
+          if (!tr.docChanged) return true
+          if (lastInteractionGlobal !== 'mouse') return true
+          if (Date.now() - lastEditorMouseDownAt > 250) return true
+
+          const before = state.doc
+          const after = tr.doc
+
+          // 点击编辑器不应该改变文本内容。这里阻止“文本不变但结构变化”的事务（常见为自动补段落）。
+          const beforeText = before.textBetween(0, before.content.size, '\n', '\n')
+          const afterText = after.textBetween(0, after.content.size, '\n', '\n')
+          if (beforeText === afterText) {
+            return false
+          }
+
+          return true
+        },
+      }),
+    ]
+  },
+})
 
 export type ChapterRichEditorChange = {
   jsonString: string
@@ -54,6 +86,7 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
 
   const editor = useEditor({
     extensions: [
+      PreventMouseAppendEmptyParagraph,
       StarterKit.configure({
         heading: { levels: [1, 2] },
       }),
@@ -66,11 +99,14 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
       },
       handleKeyDown() {
         lastInteractionRef.current = 'keyboard'
+        lastInteractionGlobal = 'keyboard'
         return false
       },
       handleDOMEvents: {
         mousedown(view) {
           lastInteractionRef.current = 'mouse'
+          lastInteractionGlobal = 'mouse'
+          lastEditorMouseDownAt = Date.now()
           captureScrollForRestore(view.dom as HTMLElement)
           return false
         },
@@ -80,14 +116,19 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
       // 这里拦截这种点击：只聚焦，不改变选区，从而避免滚动跳动。
       handleClick(view, _pos, event) {
         lastInteractionRef.current = 'mouse'
+        lastInteractionGlobal = 'mouse'
         const e = event as MouseEvent
 
-        // 注意：点在编辑器底部留白时，posAtCoords 依然可能返回“文末位置”，
-        // 导致选区跳到最后一行并触发滚动。这里用“是否点在最后一行下面”来判定留白点击。
+        // 注意：点在编辑器底部/右侧留白时，posAtCoords 依然可能返回“文末位置”，
+        // 导致选区跳到最后一行并触发滚动，甚至在某些情况下触发“自动补一个段落”。
+        // 这里用“落点是否指向文末且发生在最后一行下方/右侧空白”来判定留白点击。
         const endPos = view.state.doc.content.size
         const endCoords = view.coordsAtPos(endPos)
+        const coords = view.posAtCoords({ left: e.clientX, top: e.clientY })
         const isBelowLastLine = e.clientY > endCoords.bottom + 2
-        if (!isBelowLastLine) {
+        const isWhitespaceClick = !coords || isBelowLastLine || coords.pos >= endPos
+
+        if (!isWhitespaceClick) {
           // 正常点击文本时，也不要让任何“自动滚动到选区”的行为改变滚动位置
           requestAnimationFrame(() => {
             const snap = clickScrollRestoreRef.current
@@ -96,9 +137,32 @@ export function ChapterRichEditor({ initialContent, onChange, className }: Chapt
           return false
         }
 
+        // 如果文末是标题块（H1/H2），ProseMirror 会在“点击文末位置”时自动插入一个段落，
+        // 用来让光标落点合法。这里把光标强制放回标题内部末尾（只改选区，不改内容），避免插入段落。
+        const lastBlock = view.state.doc.lastChild
+        const isHeadingAtEnd = lastBlock?.type.name === 'heading'
+        const isClickAtDocEnd = !!coords && coords.pos >= endPos
+        if (isHeadingAtEnd && isClickAtDocEnd) {
+          e.preventDefault()
+          requestAnimationFrame(() => {
+            lastInteractionRef.current = 'programmatic'
+            lastInteractionGlobal = 'programmatic'
+            const selPos = Math.max(0, endPos - 1)
+            const tr = view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(selPos), -1))
+            view.dispatch(tr)
+            view.focus()
+            const snap = clickScrollRestoreRef.current
+            if (snap) snap.el.scrollTop = snap.top
+          })
+          return true
+        }
+
+        e.preventDefault()
         requestAnimationFrame(() => {
           lastInteractionRef.current = 'programmatic'
-          editor?.commands.focus(undefined, { scrollIntoView: false })
+          lastInteractionGlobal = 'programmatic'
+          // 只聚焦，不通过 commands 修改选区，避免 ProseMirror 在文末“补段落”
+          view.focus()
           const snap = clickScrollRestoreRef.current
           if (snap) snap.el.scrollTop = snap.top
         })
