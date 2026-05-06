@@ -181,11 +181,16 @@ export default function ChapterPage() {
       )}
 
       <div className="flex-1 overflow-hidden">
-        <div className="flex h-full">
+        <div className="flex h-full flex-col md:flex-row">
           {/* Left: chapter list */}
-          <div className="w-[360px] shrink-0 border-r border-slate-200 bg-white">
+          <div
+            className={[
+              'shrink-0 border-slate-200 bg-white md:w-[360px] md:border-r',
+              open.mode !== 'empty' ? 'hidden md:block' : 'block',
+            ].join(' ')}
+          >
             <div className="border-b border-slate-200 px-4 py-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <h1 className="truncate text-sm font-semibold text-slate-800">
                     章节 — {current.title}
@@ -195,7 +200,7 @@ export default function ChapterPage() {
                     {normalizedSearch ? ` · 匹配 ${filteredChapters.length.toLocaleString()}` : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 sm:justify-end">
                   <button
                     onClick={() => setShowUploader(true)}
                     className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -391,7 +396,7 @@ export default function ChapterPage() {
             </div>
 
             {/* Pagination */}
-            <div className="border-t border-slate-200 bg-white px-3 py-2">
+            <div className="-mt-1 border-t border-slate-200 bg-white px-3 py-1.5">
               <div className="flex items-center justify-between">
                 <div className="text-xs text-slate-500">
                   第 <span className="font-medium text-slate-700">{safePage}</span> / {totalPages} 页
@@ -445,7 +450,12 @@ export default function ChapterPage() {
           </div>
 
           {/* Right: editor */}
-          <div className="flex-1 overflow-hidden bg-slate-50">
+          <div
+            className={[
+              'flex-1 overflow-hidden bg-slate-50',
+              open.mode === 'empty' ? 'hidden md:block' : 'block',
+            ].join(' ')}
+          >
             <div className="h-full overflow-y-auto">
               {open.mode === 'empty' ? (
                 <div className="flex h-full items-center justify-center">
@@ -465,6 +475,7 @@ export default function ChapterPage() {
                     if (current) fetchChapters(current.id)
                   }}
                   onCloseCreate={() => setOpen({ mode: 'empty' })}
+                  onBackToList={() => setOpen({ mode: 'empty' })}
                 />
               )}
             </div>
@@ -783,6 +794,7 @@ function ChapterEditorPane({
   onSave,
   onSavedRefresh,
   onCloseCreate,
+  onBackToList,
 }: {
   mode: OpenState['mode']
   chapter: Chapter | null
@@ -797,6 +809,7 @@ function ChapterEditorPane({
   }) => Promise<void>
   onSavedRefresh: () => void
   onCloseCreate: () => void
+  onBackToList?: () => void
 }) {
   const isEdit = mode === 'edit'
   const chapterId = isEdit ? chapter?.id ?? null : null
@@ -1133,9 +1146,19 @@ function ChapterEditorPane({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3">
-        <h2 className="text-sm font-semibold text-slate-700">
-          {isEdit ? '章节编辑' : '新建章节'}
-        </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onBackToList}
+            className="md:hidden rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            aria-label="返回章节列表"
+          >
+            返回
+          </button>
+          <h2 className="min-w-0 truncate text-sm font-semibold text-slate-700">
+            {isEdit ? '章节编辑' : '新建章节'}
+          </h2>
+        </div>
         <div className="flex items-center gap-2">
           {!isEdit && (
             <button
