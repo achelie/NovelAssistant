@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { useNovel } from '../contexts/NovelContext'
 import {
   listChaptersByNovel,
@@ -7,6 +8,12 @@ import {
   deleteChapter,
 } from '../api/chapter'
 import type { Chapter, CreateChapterRequest, UpdateChapterRequest } from '../types'
+import { ChapterRichEditor, type ChapterRichEditorChange } from '../components/chapter/ChapterRichEditor'
+import {
+  chapterContentToPlainText,
+  isProseMirrorJsonString,
+  plainTextToMinimalDoc,
+} from '../utils/chapterContent'
 
 type EditorState =
   | { mode: 'closed' }
@@ -16,6 +23,7 @@ type EditorState =
 
 export default function ChapterPage() {
   const { current } = useNovel()
+  const { user } = useAuth()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(false)
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
@@ -106,6 +114,7 @@ export default function ChapterPage() {
     return (
       <ChapterEditor
         state={editor}
+        userId={user?.userId}
         onSave={handleSave}
         onCancel={() => setEditor({ mode: 'closed' })}
       />
@@ -174,7 +183,10 @@ export default function ChapterPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-800">{ch.title}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-400">
-                    {ch.content ? `${ch.content.length} 字` : '无内容'} · 更新于{' '}
+                    {ch.content
+                      ? `${chapterContentToPlainText(ch.content).length.toLocaleString()} 字`
+                      : '无内容'}{' '}
+                    · 更新于{' '}
                     {formatDate(ch.updatedAt)}
                   </p>
                 </div>
@@ -346,7 +358,7 @@ function TxtUploader({
         await createChapter({
           novelId,
           title: ch.title,
-          content: ch.content,
+          content: JSON.stringify(plainTextToMinimalDoc(ch.content)),
           chapterIndex: ch.chapterIndex,
         })
         setProgress({ done: i + 1, total: parsedChapters.length })
@@ -504,37 +516,217 @@ function TxtUploader({
 
 function ChapterEditor({
   state,
+  userId,
   onSave,
   onCancel,
 }: {
   state: Extract<EditorState, { mode: 'create' } | { mode: 'edit' }>
+  userId?: number
   onSave: (title: string, content: string, chapterIndex: number) => Promise<void>
   onCancel: () => void
 }) {
   const isEdit = state.mode === 'edit'
+  const draftKey = useMemo(() => {
+    if (!userId) return null
+    if (!isEdit) return `novel_assistant_chapter_draft:${userId}:new`
+    return `novel_assistant_chapter_draft:${userId}:${state.chapter.id}`
+  }, [isEdit, state, userId])
+
+  type Draft = { title: string; chapterIndex: number; content: string; updatedAt: number }
+
+  const baseContentRaw = isEdit ? (state.chapter.content ?? '') : ''
+  const basePlainText = useMemo(() => chapterContentToPlainText(baseContentRaw), [baseContentRaw])
+  const baseJsonString = useMemo(() => {
+    const raw = (baseContentRaw ?? '').trim()
+    if (!raw) return JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] })
+    if (isProseMirrorJsonString(raw)) return raw
+    return JSON.stringify(plainTextToMinimalDoc(raw))
+  }, [baseContentRaw])
+
   const [title, setTitle] = useState(isEdit ? state.chapter.title : '')
-  const [content, setContent] = useState(isEdit ? (state.chapter.content ?? '') : '')
+  const [contentJsonString, setContentJsonString] = useState(baseJsonString)
+  const [plainText, setPlainText] = useState(basePlainText)
   const [chapterIndex, setChapterIndex] = useState(
     isEdit ? (state.chapter.chapterIndex ?? 1) : 1,
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const [dirty, setDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'error'>(
+    'idle',
+  )
+  const [draftExists, setDraftExists] = useState(false)
+
+  const draftWriteTimerRef = useRef<number | null>(null)
+  const autoSaveTimerRef = useRef<number | null>(null)
+
+  // reset when switching between chapters/modes
+  useEffect(() => {
+    setTitle(isEdit ? state.chapter.title : '')
+    setChapterIndex(isEdit ? (state.chapter.chapterIndex ?? 1) : 1)
+    setContentJsonString(baseJsonString)
+    setPlainText(basePlainText)
+    setDirty(false)
+    setSaveStatus('idle')
+    setError('')
+    setDraftExists(false)
+  }, [baseJsonString, basePlainText, isEdit, state])
+
+  // restore draft on enter
+  useEffect(() => {
+    if (!draftKey) return
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Draft
+      if (!parsed || typeof parsed !== 'object') return
+      if (typeof parsed.updatedAt !== 'number') return
+
+      if (isEdit) {
+        const chapterUpdatedAt = Date.parse(state.chapter.updatedAt)
+        if (!Number.isFinite(chapterUpdatedAt)) return
+        if (parsed.updatedAt <= chapterUpdatedAt) return
+      }
+
+      if (typeof parsed.title === 'string') setTitle(parsed.title)
+      if (typeof parsed.chapterIndex === 'number') setChapterIndex(parsed.chapterIndex)
+      if (typeof parsed.content === 'string') setContentJsonString(parsed.content)
+      setDraftExists(true)
+      setDirty(true)
+      setSaveStatus('unsaved')
+    } catch {
+      // ignore broken drafts
+    }
+  }, [draftKey, isEdit, state])
+
+  const handleEditorChange = useCallback((payload: ChapterRichEditorChange) => {
+    setContentJsonString(payload.jsonString)
+    setPlainText(payload.plainText)
+    setDirty(true)
+    setSaveStatus('unsaved')
+  }, [])
+
+  const touchDirty = useCallback(() => {
+    setDirty(true)
+    setSaveStatus('unsaved')
+  }, [])
+
+  // draft write (create + edit)
+  useEffect(() => {
+    if (!draftKey) return
+    if (draftWriteTimerRef.current) window.clearTimeout(draftWriteTimerRef.current)
+
+    draftWriteTimerRef.current = window.setTimeout(() => {
+      try {
+        const draft: Draft = {
+          title,
+          chapterIndex,
+          content: contentJsonString,
+          updatedAt: Date.now(),
+        }
+        localStorage.setItem(draftKey, JSON.stringify(draft))
+        setDraftExists(true)
+      } catch {
+        // ignore quota errors
+      }
+    }, 500)
+
+    return () => {
+      if (draftWriteTimerRef.current) window.clearTimeout(draftWriteTimerRef.current)
+    }
+  }, [chapterIndex, contentJsonString, draftKey, title])
+
+  // auto save (edit only)
+  useEffect(() => {
+    if (!isEdit) return
+    if (!dirty) return
+
+    if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = window.setTimeout(async () => {
+      const t = title.trim()
+      const hasText = plainText.trim().length > 0
+      if (!t || !hasText) return
+
+      setSaveStatus('saving')
+      try {
+        const req: UpdateChapterRequest = {
+          title: t,
+          content: contentJsonString,
+          chapterIndex,
+        }
+        await updateChapter(state.chapter.id, req)
+        setDirty(false)
+        setSaveStatus('saved')
+
+        // keep draft synced (or can be cleared; we choose to keep it updated)
+        if (draftKey) {
+          const draft: Draft = {
+            title: t,
+            chapterIndex,
+            content: contentJsonString,
+            updatedAt: Date.now(),
+          }
+          localStorage.setItem(draftKey, JSON.stringify(draft))
+          setDraftExists(true)
+        }
+      } catch {
+        setSaveStatus('error')
+      }
+    }, 2500)
+
+    return () => {
+      if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [chapterIndex, contentJsonString, dirty, draftKey, isEdit, plainText, state, title])
+
+  // beforeunload warning
+  useEffect(() => {
+    const shouldWarn = dirty || (!isEdit && draftExists)
+    if (!shouldWarn) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+      return ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty, draftExists, isEdit])
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       setError('章节标题不能为空')
       return
     }
-    if (!content.trim()) {
+    if (plainText.trim().length === 0) {
       setError('章节内容不能为空')
       return
     }
     setError('')
     setSaving(true)
     try {
-      await onSave(title.trim(), content.trim(), chapterIndex)
+      setSaveStatus('saving')
+      const t = title.trim()
+      await onSave(t, contentJsonString, chapterIndex)
+      setDirty(false)
+      setSaveStatus('saved')
+
+      if (draftKey && !isEdit) {
+        localStorage.removeItem(draftKey)
+        setDraftExists(false)
+      } else if (draftKey) {
+        const draft: Draft = {
+          title: t,
+          chapterIndex,
+          content: contentJsonString,
+          updatedAt: Date.now(),
+        }
+        localStorage.setItem(draftKey, JSON.stringify(draft))
+        setDraftExists(true)
+      }
     } catch (e: any) {
       setError(e.message || '保存失败')
+      setSaveStatus('error')
     } finally {
       setSaving(false)
     }
@@ -579,7 +771,10 @@ function ChapterEditor({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                touchDirty()
+              }}
               className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               placeholder="第X章 标题"
             />
@@ -590,7 +785,10 @@ function ChapterEditor({
               type="number"
               min={1}
               value={chapterIndex}
-              onChange={(e) => setChapterIndex(Number(e.target.value))}
+              onChange={(e) => {
+                setChapterIndex(Number(e.target.value))
+                touchDirty()
+              }}
               className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </label>
@@ -598,13 +796,25 @@ function ChapterEditor({
 
         <label className="flex flex-1 flex-col">
           <span className="mb-1 block text-sm font-medium text-slate-700">章节内容</span>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="min-h-[400px] flex-1 rounded-lg border border-slate-300 px-4 py-3 text-sm leading-relaxed resize-none focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="在这里撰写章节内容..."
+          <ChapterRichEditor
+            initialContent={contentJsonString}
+            onChange={handleEditorChange}
+            className="min-h-[400px]"
           />
-          <p className="mt-1.5 text-right text-xs text-slate-400">{content.length} 字</p>
+          <div className="mt-1.5 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              {saveStatus === 'saving'
+                ? '保存中...'
+                : saveStatus === 'saved'
+                  ? '已保存'
+                  : saveStatus === 'error'
+                    ? '保存失败'
+                    : dirty
+                      ? '未保存'
+                      : '已保存'}
+            </span>
+            <span>{plainText.length.toLocaleString()} 字</span>
+          </div>
         </label>
       </div>
     </div>
