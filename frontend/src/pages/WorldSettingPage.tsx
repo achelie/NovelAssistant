@@ -9,6 +9,7 @@ import {
 import type { WorldSetting } from '../types'
 
 const SETTING_TYPES = ['地理', '魔法', '科技', '历史'] as const
+const MAX_WORLD_SETTING_CONTENT_LEN = 1500
 
 const TYPE_COLORS: Record<string, string> = {
   地理: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
@@ -246,11 +247,17 @@ export default function WorldSettingPage() {
                 <span className="mb-1 block text-sm font-medium text-slate-700">内容</span>
                 <textarea
                   value={formContent}
-                  onChange={(e) => setFormContent(e.target.value)}
+                  onChange={(e) => setFormContent(e.target.value.slice(0, MAX_WORLD_SETTING_CONTENT_LEN))}
                   rows={6}
+                  maxLength={MAX_WORLD_SETTING_CONTENT_LEN}
                   className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed resize-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
                   placeholder="描述这条世界观设定的详细内容..."
                 />
+                <div className="mt-1 flex items-center justify-end text-xs text-slate-400">
+                  <span className={formContent.length >= MAX_WORLD_SETTING_CONTENT_LEN ? 'text-amber-600' : undefined}>
+                    {formContent.length}/{MAX_WORLD_SETTING_CONTENT_LEN}
+                  </span>
+                </div>
               </label>
             </div>
 

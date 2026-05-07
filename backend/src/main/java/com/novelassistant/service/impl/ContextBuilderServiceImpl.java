@@ -28,6 +28,8 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
     // 允许“剧情背景（摘要）”拼接的最大长度（字符数），用于承载较长的多章背景
     private static final int MAX_SUMMARY_LENGTH = 10_000;
     private static final int MAX_SUMMARY_COUNT = 20;
+    // 世界观设定：每个标签卡（单条设定）进入 Prompt 的最大长度（字符数）
+    private static final int MAX_WORLD_SETTING_ITEM_LENGTH = 1_500;
 
     @Override
     public String buildSystemPrompt() {
@@ -216,7 +218,8 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
         return worldSettingIds.stream()
                 .map(worldSettingService::getById)
                 .filter(w -> w != null)
-                .map(w -> "- " + w.getTitle() + "：" + truncate(w.getContent(), 150))
+                // 世界观设定通常较长，需要尽量完整带入（避免 Prompt 缺信息）
+                .map(w -> "- " + w.getTitle() + "：" + truncate(w.getContent(), MAX_WORLD_SETTING_ITEM_LENGTH))
                 .collect(Collectors.joining("\n"));
     }
 

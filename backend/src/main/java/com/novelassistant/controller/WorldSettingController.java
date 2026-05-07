@@ -24,11 +24,13 @@ public class WorldSettingController {
     private final WorldSettingService worldSettingService;
     private final NovelService novelService;
     private final EmbeddingService embeddingService;
+    private static final int MAX_CONTENT_LEN = 1500;
 
     @PostMapping
     public Result<WorldSetting> create(@RequestBody WorldSetting worldSetting) {
         Long userId = getCurrentUserId();
         checkNovelOwnership(worldSetting.getNovelId(), userId);
+        validate(worldSetting);
 
         worldSettingService.save(worldSetting);
 
@@ -65,6 +67,7 @@ public class WorldSettingController {
             throw new BusinessException(404, "世界观设定不存在");
         }
         checkNovelOwnership(existing.getNovelId(), userId);
+        validate(worldSetting);
 
         worldSetting.setId(id);
         worldSettingService.updateById(worldSetting);
@@ -72,6 +75,14 @@ public class WorldSettingController {
         asyncIndex("world_setting", id, existing.getNovelId(), worldSetting.getContent());
 
         return Result.success();
+    }
+
+    private void validate(WorldSetting ws) {
+        if (ws == null) return;
+        String content = ws.getContent();
+        if (content != null && content.length() > MAX_CONTENT_LEN) {
+            throw new BusinessException(400, "世界观设定内容不能超过" + MAX_CONTENT_LEN + "字");
+        }
     }
 
     @DeleteMapping("/{id}")
