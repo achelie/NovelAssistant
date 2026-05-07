@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNovel } from '../contexts/NovelContext'
 import { WritingDraftProvider } from '../contexts/WritingDraftContext'
+import { CloudPenLogo } from '../components/brand/CloudPenLogo'
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -42,8 +43,15 @@ export default function MainLayout() {
       <aside className="flex w-60 flex-col bg-white border-r border-slate-200">
         {/* App title */}
         <div className="px-5 pt-6 pb-4">
-          <h1 className="text-lg font-bold text-slate-800">Novel Assistant</h1>
-          <p className="text-xs text-slate-400 mt-0.5">AI 写小说助手</p>
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fbf7ef] ring-1 ring-slate-900/10 shadow-sm">
+              <CloudPenLogo className="h-5 w-5 text-slate-900/80" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold tracking-tight text-slate-900">云笔</h1>
+              <p className="mt-0.5 text-xs text-slate-400">AI 写小说助手</p>
+            </div>
+          </div>
         </div>
 
         {/* Novel selector */}
