@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNovel } from '../contexts/NovelContext'
+import { WritingDraftProvider } from '../contexts/WritingDraftContext'
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -147,7 +148,9 @@ export default function MainLayout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto">
-        <Outlet />
+        <WritingDraftProvider>
+          <Outlet />
+        </WritingDraftProvider>
       </main>
     </div>
   )

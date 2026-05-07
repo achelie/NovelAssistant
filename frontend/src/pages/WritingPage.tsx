@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNovel } from '../contexts/NovelContext'
+import { useWritingDraft } from '../contexts/WritingDraftContext'
 import { listSummariesByNovel } from '../api/summary'
 import { listCharacters } from '../api/character'
 import { listCharacterRelationsByNovel } from '../api/characterRelation'
@@ -15,13 +16,10 @@ import type {
   PlotTimeline,
   Summary,
   WorldSetting,
-  WritingPromptPreview,
   WritingRequest,
 } from '../types'
 
 const WORD_OPTIONS = [2000, 3000, 4000] as const
-
-type PromptTab = 'full' | 'system' | 'user'
 
 function toggleId(list: number[], id: number): number[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
@@ -66,6 +64,7 @@ function buildWritingPayload(
 
 export default function WritingPage() {
   const { current, refresh } = useNovel()
+  const { draft, update, patch, updateForNovel } = useWritingDraft(current?.id)
   const [summaries, setSummaries] = useState<Summary[]>([])
   const [characters, setCharacters] = useState<Character[]>([])
   const [relations, setRelations] = useState<CharacterRelation[]>([])
@@ -74,22 +73,8 @@ export default function WritingPage() {
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [materialsLoading, setMaterialsLoading] = useState(false)
 
-  const [summaryIds, setSummaryIds] = useState<number[]>([])
-  const [characterIds, setCharacterIds] = useState<number[]>([])
-  const [relationIds, setRelationIds] = useState<number[]>([])
-  const [plotIds, setPlotIds] = useState<number[]>([])
-  const [worldIds, setWorldIds] = useState<number[]>([])
-
-  const [targetWords, setTargetWords] = useState<(typeof WORD_OPTIONS)[number]>(3000)
-  const [outline, setOutline] = useState('')
-  const [writingStyle, setWritingStyle] = useState('')
-  const [chapterTitle, setChapterTitle] = useState('')
-
-  const [preview, setPreview] = useState<WritingPromptPreview | null>(null)
-  const [promptTab, setPromptTab] = useState<PromptTab>('full')
   const [previewLoading, setPreviewLoading] = useState(false)
 
-  const [streamText, setStreamText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const streamAbortRef = useRef<AbortController | null>(null)
 
@@ -98,45 +83,48 @@ export default function WritingPage() {
 
   const suggestedIndex = useMemo(() => nextChapterIndex(chapters), [chapters])
 
-  const loadMaterials = useCallback(async (novelId: number) => {
-    setMaterialsLoading(true)
-    setError('')
-    try {
-      const [sRes, cRes, rRes, pRes, wRes, chRes] = await Promise.all([
-        listSummariesByNovel(novelId),
-        listCharacters(1, 200),
-        listCharacterRelationsByNovel(novelId),
-        listPlotTimelinesByNovel(novelId),
-        listWorldSettingsByNovel(novelId),
-        listChaptersByNovel(novelId),
-      ])
-      setSummaries([...sRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex))
-      setCharacters(cRes.data.records.filter((c) => c.novelId === novelId))
-      setRelations(rRes.data)
-      setPlots(pRes.data)
-      setWorlds(wRes.data)
-      const chList = [...chRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex)
-      setChapters(chList)
-      const next = nextChapterIndex(chList)
-      setChapterTitle((t) => (t.trim() === '' ? `第${next}章` : t))
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '加载素材失败')
-      setSummaries([])
-      setCharacters([])
-      setRelations([])
-      setPlots([])
-      setWorlds([])
-      setChapters([])
-    } finally {
-      setMaterialsLoading(false)
-    }
-  }, [])
+  const loadMaterials = useCallback(
+    async (novelId: number) => {
+      setMaterialsLoading(true)
+      setError('')
+      try {
+        const [sRes, cRes, rRes, pRes, wRes, chRes] = await Promise.all([
+          listSummariesByNovel(novelId),
+          listCharacters(1, 200),
+          listCharacterRelationsByNovel(novelId),
+          listPlotTimelinesByNovel(novelId),
+          listWorldSettingsByNovel(novelId),
+          listChaptersByNovel(novelId),
+        ])
+        setSummaries([...sRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex))
+        setCharacters(cRes.data.records.filter((c) => c.novelId === novelId))
+        setRelations(rRes.data)
+        setPlots(pRes.data)
+        setWorlds(wRes.data)
+        const chList = [...chRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex)
+        setChapters(chList)
+        const next = nextChapterIndex(chList)
+        updateForNovel(novelId, (d) => ({
+          ...d,
+          chapterTitle: d.chapterTitle.trim() === '' ? `第${next}章` : d.chapterTitle,
+        }))
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : '加载素材失败')
+        setSummaries([])
+        setCharacters([])
+        setRelations([])
+        setPlots([])
+        setWorlds([])
+        setChapters([])
+      } finally {
+        setMaterialsLoading(false)
+      }
+    },
+    [updateForNovel],
+  )
 
   useEffect(() => {
     if (current) {
-      setChapterTitle('')
-      setStreamText('')
-      setPreview(null)
       loadMaterials(current.id)
     } else {
       setSummaries([])
@@ -145,26 +133,24 @@ export default function WritingPage() {
       setPlots([])
       setWorlds([])
       setChapters([])
-      setPreview(null)
-      setStreamText('')
     }
   }, [current, loadMaterials])
 
   const writingPayload = (): WritingRequest | null => {
     if (!current) return null
-    const o = outline.trim()
+    const o = draft.outline.trim()
     if (!o) return null
     return buildWritingPayload(
       current.id,
       o,
-      writingStyle,
-      targetWords,
-      summaryIds,
-      characterIds,
-      relationIds,
-      plotIds,
-      worldIds,
-      chapterTitle,
+      draft.writingStyle,
+      draft.targetWords,
+      draft.summaryIds,
+      draft.characterIds,
+      draft.relationIds,
+      draft.plotIds,
+      draft.worldIds,
+      draft.chapterTitle,
       suggestedIndex,
     )
   }
@@ -177,11 +163,10 @@ export default function WritingPage() {
     }
     setPreviewLoading(true)
     setError('')
-    setPreview(null)
+    patch({ preview: null })
     try {
       const res = await previewWritingPrompt(payload)
-      setPreview(res.data)
-      setPromptTab('full')
+      patch({ preview: res.data, promptTab: 'full' })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '预览失败')
     } finally {
@@ -204,14 +189,14 @@ export default function WritingPage() {
     handleStopStream()
     const ac = new AbortController()
     streamAbortRef.current = ac
-    setStreamText('')
+    patch({ streamText: '' })
     setIsStreaming(true)
     setError('')
     try {
       await consumeWritingGenerateStream(
         payload,
         (chunk) => {
-          setStreamText((prev) => prev + chunk)
+          update((d) => ({ ...d, streamText: d.streamText + chunk }))
         },
         { signal: ac.signal },
       )
@@ -232,12 +217,12 @@ export default function WritingPage() {
 
   const handleSaveChapter = async () => {
     if (!current) return
-    const content = streamText.trim()
+    const content = draft.streamText.trim()
     if (!content) {
       setError('请先生成续写正文后再保存')
       return
     }
-    const title = chapterTitle.trim() || `第${suggestedIndex}章`
+    const title = draft.chapterTitle.trim() || `第${suggestedIndex}章`
     setSavingChapter(true)
     setError('')
     try {
@@ -247,8 +232,7 @@ export default function WritingPage() {
         content,
         chapterIndex: suggestedIndex,
       })
-      setChapterTitle('')
-      setStreamText('')
+      patch({ chapterTitle: '', streamText: '' })
       await loadMaterials(current.id)
       await refresh()
     } catch (e: unknown) {
@@ -265,13 +249,13 @@ export default function WritingPage() {
   }, [])
 
   const displayedPrompt =
-    preview == null
+    draft.preview == null
       ? ''
-      : promptTab === 'full'
-        ? preview.fullText
-        : promptTab === 'system'
-          ? preview.systemPrompt
-          : preview.userPrompt
+      : draft.promptTab === 'full'
+        ? draft.preview.fullText
+        : draft.promptTab === 'system'
+          ? draft.preview.systemPrompt
+          : draft.preview.userPrompt
 
   if (!current) {
     return (
@@ -314,8 +298,8 @@ export default function WritingPage() {
                 <span className="mb-1 block text-sm font-medium text-slate-700">章节标题</span>
                 <input
                   type="text"
-                  value={chapterTitle}
-                  onChange={(e) => setChapterTitle(e.target.value)}
+                  value={draft.chapterTitle}
+                  onChange={(e) => patch({ chapterTitle: e.target.value })}
                   disabled={isStreaming}
                   className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
                   placeholder={`第${suggestedIndex}章`}
@@ -335,9 +319,9 @@ export default function WritingPage() {
                 {summaries.map((s) => (
                   <CheckboxRow
                     key={s.id}
-                    checked={summaryIds.includes(s.id)}
+                    checked={draft.summaryIds.includes(s.id)}
                     disabled={isStreaming}
-                    onChange={() => setSummaryIds((x) => toggleId(x, s.id))}
+                    onChange={() => update((d) => ({ ...d, summaryIds: toggleId(d.summaryIds, s.id) }))}
                     label={`第${s.chapterIndex}章 · ${s.title}`}
                   />
                 ))}
@@ -346,9 +330,9 @@ export default function WritingPage() {
                 {characters.map((c) => (
                   <CheckboxRow
                     key={c.id}
-                    checked={characterIds.includes(c.id)}
+                    checked={draft.characterIds.includes(c.id)}
                     disabled={isStreaming}
-                    onChange={() => setCharacterIds((x) => toggleId(x, c.id))}
+                    onChange={() => update((d) => ({ ...d, characterIds: toggleId(d.characterIds, c.id) }))}
                     label={c.name}
                   />
                 ))}
@@ -357,9 +341,9 @@ export default function WritingPage() {
                 {relations.map((r) => (
                   <CheckboxRow
                     key={r.id}
-                    checked={relationIds.includes(r.id)}
+                    checked={draft.relationIds.includes(r.id)}
                     disabled={isStreaming}
-                    onChange={() => setRelationIds((x) => toggleId(x, r.id))}
+                    onChange={() => update((d) => ({ ...d, relationIds: toggleId(d.relationIds, r.id) }))}
                     label={`${charName(characters, r.characterAId)} — ${r.relationType} — ${charName(characters, r.characterBId)}`}
                   />
                 ))}
@@ -368,9 +352,9 @@ export default function WritingPage() {
                 {plots.map((p) => (
                   <CheckboxRow
                     key={p.id}
-                    checked={plotIds.includes(p.id)}
+                    checked={draft.plotIds.includes(p.id)}
                     disabled={isStreaming}
-                    onChange={() => setPlotIds((x) => toggleId(x, p.id))}
+                    onChange={() => update((d) => ({ ...d, plotIds: toggleId(d.plotIds, p.id) }))}
                     label={p.eventTime ? `${p.eventTime} · ${p.title}` : p.title}
                   />
                 ))}
@@ -379,9 +363,9 @@ export default function WritingPage() {
                 {worlds.map((w) => (
                   <CheckboxRow
                     key={w.id}
-                    checked={worldIds.includes(w.id)}
+                    checked={draft.worldIds.includes(w.id)}
                     disabled={isStreaming}
-                    onChange={() => setWorldIds((x) => toggleId(x, w.id))}
+                    onChange={() => update((d) => ({ ...d, worldIds: toggleId(d.worldIds, w.id) }))}
                     label={`[${w.type}] ${w.title}`}
                   />
                 ))}
@@ -396,7 +380,7 @@ export default function WritingPage() {
                 <label
                   key={n}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                    targetWords === n
+                    draft.targetWords === n
                       ? 'border-indigo-500 bg-indigo-50 text-indigo-800'
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                   }`}
@@ -404,8 +388,8 @@ export default function WritingPage() {
                   <input
                     type="radio"
                     name="words"
-                    checked={targetWords === n}
-                    onChange={() => setTargetWords(n)}
+                    checked={draft.targetWords === n}
+                    onChange={() => patch({ targetWords: n })}
                     className="text-indigo-600 focus:ring-indigo-500"
                     disabled={isStreaming}
                   />
@@ -422,8 +406,8 @@ export default function WritingPage() {
                 本章章纲 <span className="text-red-500">*</span>
               </span>
               <textarea
-                value={outline}
-                onChange={(e) => setOutline(e.target.value)}
+                value={draft.outline}
+                onChange={(e) => patch({ outline: e.target.value })}
                 rows={8}
                 disabled={isStreaming}
                 className="block w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
@@ -433,11 +417,11 @@ export default function WritingPage() {
             <label className="block">
               <span className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700">
                 <span>文风（最多 200 字，可选）</span>
-                <span className="font-normal text-xs text-slate-400">{writingStyle.length}/200</span>
+                <span className="font-normal text-xs text-slate-400">{draft.writingStyle.length}/200</span>
               </span>
               <textarea
-                value={writingStyle}
-                onChange={(e) => setWritingStyle(e.target.value.slice(0, 200))}
+                value={draft.writingStyle}
+                onChange={(e) => patch({ writingStyle: e.target.value.slice(0, 200) })}
                 rows={4}
                 maxLength={200}
                 disabled={isStreaming}
@@ -451,19 +435,19 @@ export default function WritingPage() {
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-800">续写正文（流式输出）</h2>
               <p className="mt-0.5 text-xs text-slate-400">
-                当前约 {streamText.length} 字（字符数，含标点）。生成中可随时停止。
+                当前约 {draft.streamText.length} 字（字符数，含标点）。生成中可随时停止。
               </p>
             </div>
             <textarea
               readOnly
-              value={streamText}
+              value={draft.streamText}
               rows={16}
               className="block w-full resize-y border-0 bg-slate-50/50 px-4 py-3 font-serif text-sm leading-relaxed text-slate-800 focus:outline-none md:text-base"
               placeholder="点击「开始流式续写」后，正文将逐字出现在此处…"
             />
           </section>
 
-          {preview && (
+          {draft.preview && (
             <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
                 <span className="text-sm font-medium text-slate-700">Prompt 预览</span>
@@ -478,9 +462,9 @@ export default function WritingPage() {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => setPromptTab(key)}
+                      onClick={() => patch({ promptTab: key })}
                       className={`rounded-md px-3 py-1.5 transition ${
-                        promptTab === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                        draft.promptTab === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       {label}
@@ -509,7 +493,7 @@ export default function WritingPage() {
             <button
               type="button"
               onClick={handleStartStream}
-              disabled={isStreaming || !outline.trim()}
+              disabled={isStreaming || !draft.outline.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:opacity-50 sm:flex-none sm:px-6"
             >
               {isStreaming ? (
@@ -528,7 +512,7 @@ export default function WritingPage() {
             <button
               type="button"
               onClick={handleSaveChapter}
-              disabled={savingChapter || isStreaming || !streamText.trim()}
+              disabled={savingChapter || isStreaming || !draft.streamText.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50 sm:flex-none sm:px-6"
             >
               {savingChapter ? (
