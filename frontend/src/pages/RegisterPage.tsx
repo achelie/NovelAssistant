@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { AuthShell } from '../components/auth/AuthShell'
+import { AuthAlert, AuthTextField, PasswordField, PrimaryButton } from '../components/auth/AuthControls'
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -42,107 +44,103 @@ export default function RegisterPage() {
     setForm((prev) => ({ ...prev, [field]: value }))
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-800">
-            Novel Assistant
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">创建新账号</p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          {error && (
-            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              用户名
-            </span>
-            <input
-              type="text"
-              required
-              minLength={3}
-              maxLength={20}
-              value={form.username}
-              onChange={(e) => update('username', e.target.value)}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
-              placeholder="3-20个字符"
-            />
-          </label>
-
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              邮箱
-            </span>
-            <input
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => update('email', e.target.value)}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
-              placeholder="your@email.com"
-            />
-          </label>
-
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              密码
-            </span>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={form.password}
-              onChange={(e) => update('password', e.target.value)}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
-              placeholder="至少6位"
-            />
-          </label>
-
-          <label className="mb-6 block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              确认密码
-            </span>
-            <input
-              type="password"
-              required
-              value={form.confirm}
-              onChange={(e) => update('confirm', e.target.value)}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
-              placeholder="再次输入密码"
-            />
-          </label>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              '注 册'
-            )}
-          </button>
-        </form>
-
-        <p className="mt-5 text-center text-sm text-slate-500">
+    <AuthShell
+      title="创建账号"
+      subtitle="用一个轻量账号，开启你的世界观与角色库。"
+      footer={
+        <p className="text-center">
           已有账号？{' '}
-          <Link
-            to="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-700"
-          >
+          <Link to="/login" className="font-semibold text-indigo-200 hover:text-white">
             返回登录
           </Link>
         </p>
-      </div>
-    </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <AuthAlert message={error} />
+
+        <AuthTextField
+          label="用户名"
+          value={form.username}
+          onChange={(v) => update('username', v)}
+          required
+          minLength={3}
+          maxLength={20}
+          autoComplete="username"
+          placeholder="3-20 个字符"
+          icon={<UserIcon className="h-4 w-4" />}
+        />
+
+        <AuthTextField
+          label="邮箱"
+          value={form.email}
+          onChange={(v) => update('email', v)}
+          required
+          type="email"
+          autoComplete="email"
+          placeholder="your@email.com"
+          icon={<MailIcon className="h-4 w-4" />}
+        />
+
+        <PasswordField
+          label="密码"
+          value={form.password}
+          onChange={(v) => update('password', v)}
+          required
+          minLength={6}
+          autoComplete="new-password"
+          placeholder="至少 6 位"
+        />
+
+        <PasswordField
+          label="确认密码"
+          value={form.confirm}
+          onChange={(v) => update('confirm', v)}
+          required
+          autoComplete="new-password"
+          placeholder="再次输入密码"
+        />
+        <PrimaryButton loading={submitting}>注 册</PrimaryButton>
+      </form>
+    </AuthShell>
+  )
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M4.5 20a7.5 7.5 0 0 1 15 0"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4.5 7.5h15v9h-15v-9Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 8l7 6 7-6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.85"
+      />
+    </svg>
   )
 }
