@@ -28,10 +28,10 @@ export function AuthTextField({
   const id = useId()
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-white/80">{label}</span>
+      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
       <div className="relative">
         {icon ? (
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
             {icon}
           </span>
         ) : null}
@@ -46,8 +46,8 @@ export function AuthTextField({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className={[
-            'block w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white placeholder:text-white/35',
-            'focus:border-indigo-300/40 focus:outline-none focus:ring-2 focus:ring-indigo-400/20',
+            'block w-full rounded-xl border border-slate-900/10 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm',
+            'focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400/20',
             icon ? 'pl-10' : '',
             right ? 'pr-10' : '',
           ].join(' ')}
@@ -91,7 +91,7 @@ export function PasswordField({
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          className="grid h-9 w-9 place-items-center rounded-lg text-white/55 hover:bg-white/10 hover:text-white/80"
+          className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-900/5 hover:text-slate-700"
           aria-label={show ? '隐藏密码' : '显示密码'}
         >
           {show ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
@@ -104,9 +104,9 @@ export function PasswordField({
 export function AuthAlert({ message }: { message: string }) {
   if (!message) return null
   return (
-    <div className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+    <div className="rounded-2xl border border-red-300/50 bg-red-50 px-4 py-3 text-sm text-red-700">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 text-red-200/80">
+        <span className="mt-0.5 text-red-500/80">
           <AlertIcon className="h-4 w-4" />
         </span>
         <span className="leading-relaxed">{message}</span>
@@ -130,12 +130,12 @@ export function PrimaryButton({
       disabled={disabled || loading}
       className={[
         'group relative inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
-        'bg-gradient-to-b from-indigo-400 to-indigo-600 text-white shadow-[0_18px_60px_-25px_rgba(99,102,241,0.75)]',
-        'hover:from-indigo-300 hover:to-indigo-600',
+        'bg-gradient-to-b from-[#9a7848] to-[#6f542f] text-white shadow-[0_18px_60px_-28px_rgba(111,84,47,0.32)]',
+        'hover:from-[#8b6b3f] hover:to-[#5f4727]',
         'disabled:cursor-not-allowed disabled:opacity-60',
       ].join(' ')}
     >
-      <span className="absolute inset-0 rounded-xl ring-1 ring-white/10" />
+      <span className="absolute inset-0 rounded-xl ring-1 ring-[#6f542f]/18" />
       {loading ? <Spinner className="h-4 w-4" /> : null}
       <span className="relative">{children}</span>
     </button>

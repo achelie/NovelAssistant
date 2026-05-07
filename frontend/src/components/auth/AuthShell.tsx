@@ -13,42 +13,44 @@ export function AuthShell({
   footer: ReactNode
 }) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="relative min-h-screen overflow-hidden bg-[#fbf7ef] text-slate-900">
       {/* background */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
-        <div className="absolute -right-32 top-24 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/2 h-80 w-[44rem] -translate-x-1/2 rounded-full bg-fuchsia-400/10 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.10] [background-image:radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.55)_1px,transparent_0)] [background-size:18px_18px]" />
+        {/* paper wash */}
+        <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_0%,rgba(59,130,246,0.10),transparent_55%),radial-gradient(70%_55%_at_0%_30%,rgba(99,102,241,0.10),transparent_60%),radial-gradient(80%_60%_at_100%_70%,rgba(14,165,233,0.10),transparent_55%)]" />
+        {/* subtle paper grain */}
+        <div className="absolute inset-0 opacity-[0.07] [background-image:radial-gradient(circle_at_1px_1px,rgba(2,6,23,0.55)_1px,transparent_0)] [background-size:22px_22px]" />
+        {/* vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_10%,transparent_35%,rgba(2,6,23,0.06)_100%)]" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-10 sm:px-6 lg:py-14">
         <div className="w-full max-w-md">
-          <div className="mx-auto w-full rounded-3xl border border-white/10 bg-white/[0.06] p-7 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.75)] ring-1 ring-white/10 sm:p-8">
+          <div className="mx-auto w-full rounded-3xl border border-slate-900/10 bg-white/70 p-7 shadow-[0_30px_120px_-60px_rgba(2,6,23,0.35)] ring-1 ring-white/60 backdrop-blur-md sm:p-8">
             <div className="flex items-center justify-between">
-              <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 ring-1 ring-white/10">
-                  <LogoMark className="h-4 w-4 text-white/90" />
+              <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900/80 hover:text-slate-900">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white ring-1 ring-slate-900/10 shadow-sm">
+                  <LogoMark className="h-4 w-4 text-slate-900/80" />
                 </span>
                 <span className="font-serif tracking-tight">云笔</span>
               </Link>
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-white/60 ring-1 ring-white/10">
+              <span className="rounded-full bg-slate-900/5 px-2.5 py-1 text-[11px] text-slate-700 ring-1 ring-slate-900/10">
                 Beta
               </span>
             </div>
 
             <div className="mt-6">
-              <h1 className="text-xl font-semibold tracking-tight text-white">{title}</h1>
-              <p className="mt-1 text-sm text-white/60">{subtitle}</p>
+              <h1 className="font-serif text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+              <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
             </div>
 
             <div className="mt-6">{children}</div>
 
-            <div className="mt-6 border-t border-white/10 pt-5 text-sm text-white/65">{footer}</div>
+            <div className="mt-6 border-t border-slate-900/10 pt-5 text-sm text-slate-600">{footer}</div>
           </div>
 
-          <p className="mx-auto mt-6 max-w-md text-center text-xs text-white/40">
-            登录即表示你同意以合理方式使用模型输出
+          <p className="mx-auto mt-6 max-w-md text-center text-xs text-slate-500">
+            登录即表示你同意以合理方式使用模型输出。
           </p>
         </div>
       </div>

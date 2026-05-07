@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import type { Location } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { AuthShell } from '../components/auth/AuthShell'
 import { AuthAlert, AuthTextField, PasswordField, PrimaryButton } from '../components/auth/AuthControls'
+
+type FromState = { from?: Location }
 
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as any)?.from?.pathname || '/'
+  const from = (location.state as FromState | null)?.from?.pathname || '/'
 
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
@@ -21,8 +24,8 @@ export default function LoginPage() {
     try {
       await login(form)
       navigate(from, { replace: true })
-    } catch (err: any) {
-      setError(err.message || '登录失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '登录失败')
     } finally {
       setSubmitting(false)
     }
@@ -35,7 +38,10 @@ export default function LoginPage() {
       footer={
         <p className="text-center">
           还没有账号？{' '}
-          <Link to="/register" className="font-semibold text-indigo-200 hover:text-white">
+          <Link
+            to="/register"
+            className="font-semibold text-slate-600 underline decoration-slate-300/70 underline-offset-4 hover:text-[#6f542f] hover:decoration-[#6f542f]/40"
+          >
             立即注册
           </Link>
         </p>
@@ -64,7 +70,7 @@ export default function LoginPage() {
         />
 
         <div className="flex items-center justify-between pt-1 text-xs">
-          <span className="text-white/40">v0.1</span>
+          <span className="text-slate-500">v0.1</span>
         </div>
 
         <PrimaryButton loading={submitting}>登 录</PrimaryButton>

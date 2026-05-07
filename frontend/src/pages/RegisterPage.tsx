@@ -33,8 +33,8 @@ export default function RegisterPage() {
         password: form.password,
       })
       navigate('/login', { replace: true })
-    } catch (err: any) {
-      setError(err.message || '注册失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '注册失败')
     } finally {
       setSubmitting(false)
     }
@@ -50,7 +50,10 @@ export default function RegisterPage() {
       footer={
         <p className="text-center">
           已有账号？{' '}
-          <Link to="/login" className="font-semibold text-indigo-200 hover:text-white">
+          <Link
+            to="/login"
+            className="font-semibold text-slate-600 underline decoration-slate-300/70 underline-offset-4 hover:text-[#6f542f] hover:decoration-[#6f542f]/40"
+          >
             返回登录
           </Link>
         </p>
