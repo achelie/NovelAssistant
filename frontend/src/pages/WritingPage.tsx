@@ -20,6 +20,8 @@ import type {
 } from '../types'
 
 const WORD_OPTIONS = [2000, 3000, 4000] as const
+const SUMMARY_PAGE_SIZE = 30
+const SUMMARY_MAX_SELECTED = 30
 
 function toggleId(list: number[], id: number): number[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
@@ -80,6 +82,7 @@ export default function WritingPage() {
 
   const [savingChapter, setSavingChapter] = useState(false)
   const [error, setError] = useState('')
+  const [summaryPage, setSummaryPage] = useState(1)
 
   const suggestedIndex = useMemo(() => nextChapterIndex(chapters), [chapters])
 
@@ -96,7 +99,8 @@ export default function WritingPage() {
           listWorldSettingsByNovel(novelId),
           listChaptersByNovel(novelId),
         ])
-        setSummaries([...sRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex))
+        const sortedSummaries = [...sRes.data].sort((a, b) => b.chapterIndex - a.chapterIndex)
+        setSummaries(sortedSummaries)
         setCharacters(cRes.data.records.filter((c) => c.novelId === novelId))
         setRelations(rRes.data)
         setPlots(pRes.data)
@@ -104,9 +108,11 @@ export default function WritingPage() {
         const chList = [...chRes.data].sort((a, b) => a.chapterIndex - b.chapterIndex)
         setChapters(chList)
         const next = nextChapterIndex(chList)
+        const defaultSummaryIds = sortedSummaries.slice(0, SUMMARY_MAX_SELECTED).map((s) => s.id)
         updateForNovel(novelId, (d) => ({
           ...d,
           chapterTitle: d.chapterTitle.trim() === '' ? `第${next}章` : d.chapterTitle,
+          summaryIds: d.summaryIds.length === 0 ? defaultSummaryIds : d.summaryIds,
         }))
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : '加载素材失败')
@@ -135,6 +141,62 @@ export default function WritingPage() {
       setChapters([])
     }
   }, [current, loadMaterials])
+
+  const summaryTotalPages = Math.max(1, Math.ceil(summaries.length / SUMMARY_PAGE_SIZE))
+  useEffect(() => {
+    setSummaryPage((p) => Math.min(Math.max(1, p), summaryTotalPages))
+  }, [summaryTotalPages])
+
+  const pagedSummaries = useMemo(() => {
+    const start = (summaryPage - 1) * SUMMARY_PAGE_SIZE
+    return summaries.slice(start, start + SUMMARY_PAGE_SIZE)
+  }, [summaries, summaryPage])
+
+  const allSummariesCheckedOnPage = useMemo(() => {
+    if (pagedSummaries.length === 0) return false
+    return pagedSummaries.every((s) => draft.summaryIds.includes(s.id))
+  }, [draft.summaryIds, pagedSummaries])
+
+  const handleToggleSummary = useCallback(
+    (id: number) => {
+      update((d) => {
+        const checked = d.summaryIds.includes(id)
+        if (checked) {
+          return { ...d, summaryIds: d.summaryIds.filter((x) => x !== id) }
+        }
+        if (d.summaryIds.length >= SUMMARY_MAX_SELECTED) {
+          setError(`摘要最多勾选 ${SUMMARY_MAX_SELECTED} 条`)
+          return d
+        }
+        return { ...d, summaryIds: [...d.summaryIds, id] }
+      })
+    },
+    [update],
+  )
+
+  const handleToggleAllSummariesOnPage = useCallback(() => {
+    update((d) => {
+      const pageIds = pagedSummaries.map((s) => s.id)
+      const pageUnchecked = pageIds.filter((id) => !d.summaryIds.includes(id))
+
+      if (pageUnchecked.length === 0) {
+        // 全不选：只移除当前页的
+        return { ...d, summaryIds: d.summaryIds.filter((id) => !pageIds.includes(id)) }
+      }
+
+      // 全选：受总上限约束，最多补到 30
+      const remaining = SUMMARY_MAX_SELECTED - d.summaryIds.length
+      if (remaining <= 0) {
+        setError(`摘要最多勾选 ${SUMMARY_MAX_SELECTED} 条`)
+        return d
+      }
+      const toAdd = pageUnchecked.slice(0, remaining)
+      if (toAdd.length < pageUnchecked.length) {
+        setError(`摘要最多勾选 ${SUMMARY_MAX_SELECTED} 条，已只补选本页前 ${toAdd.length} 条`)
+      }
+      return { ...d, summaryIds: [...d.summaryIds, ...toAdd] }
+    })
+  }, [pagedSummaries, update])
 
   const writingPayload = (): WritingRequest | null => {
     if (!current) return null
@@ -315,13 +377,58 @@ export default function WritingPage() {
           <section>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">可选素材</h2>
             <div className="grid gap-4 md:grid-cols-2">
-              <CheckboxPanel title="摘要" empty="暂无摘要" count={summaries.length}>
-                {summaries.map((s) => (
+              <CheckboxPanel
+                title="摘要"
+                empty="暂无摘要"
+                count={summaries.length}
+                extra={
+                  <div className="flex items-center justify-between gap-2 px-1 pb-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleAllSummariesOnPage}
+                      disabled={isStreaming || pagedSummaries.length === 0}
+                      className="text-xs font-medium text-indigo-700 hover:text-indigo-800 disabled:opacity-50"
+                    >
+                      {allSummariesCheckedOnPage ? '本页全不选' : '本页全选'}
+                    </button>
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span>
+                        已选 <span className="font-mono text-slate-700">{draft.summaryIds.length}</span>/
+                        {SUMMARY_MAX_SELECTED}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={summaryPage <= 1}
+                          onClick={() => setSummaryPage((p) => Math.max(1, p - 1))}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          上一页
+                        </button>
+                        <span className="font-mono text-slate-600">
+                          {summaryPage}/{summaryTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={summaryPage >= summaryTotalPages}
+                          onClick={() => setSummaryPage((p) => Math.min(summaryTotalPages, p + 1))}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          下一页
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                }
+              >
+                {pagedSummaries.map((s) => (
                   <CheckboxRow
                     key={s.id}
                     checked={draft.summaryIds.includes(s.id)}
-                    disabled={isStreaming}
-                    onChange={() => update((d) => ({ ...d, summaryIds: toggleId(d.summaryIds, s.id) }))}
+                    disabled={
+                      isStreaming || (!draft.summaryIds.includes(s.id) && draft.summaryIds.length >= SUMMARY_MAX_SELECTED)
+                    }
+                    onChange={() => handleToggleSummary(s.id)}
                     label={`第${s.chapterIndex}章 · ${s.title}`}
                   />
                 ))}
@@ -533,16 +640,19 @@ function CheckboxPanel({
   count,
   children,
   className,
+  extra,
 }: {
   title: string
   empty: string
   count: number
   children: ReactNode
   className?: string
+  extra?: ReactNode
 }) {
   return (
     <div className={`rounded-xl border border-slate-200 bg-slate-50/80 p-3 ${className ?? ''}`}>
       <h3 className="mb-2 text-xs font-semibold text-slate-500">{title}</h3>
+      {extra}
       {count === 0 ? (
         <p className="py-4 text-center text-xs text-slate-400">{empty}</p>
       ) : (
