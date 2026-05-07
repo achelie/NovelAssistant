@@ -19,14 +19,14 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { to: '/', end: true, label: 'AI 续写', icon: PenIcon },
   { to: '/novels', label: '小说管理', icon: BookOpenIcon },
   { to: '/chapters', label: '章节管理', icon: DocumentIcon, requiresNovel: true },
+  { to: '/summaries', label: '摘要管理', icon: ListIcon, requiresNovel: true },
+  { to: '/', end: true, label: 'AI 续写', icon: PenIcon },
   { to: '/characters', label: '角色卡', icon: UserIcon, requiresNovel: true },
+  { to: '/world-setting', label: '世界观设定', icon: GlobeIcon, requiresNovel: true },
   { to: '/character-relations', label: '人物关系', icon: LinkIcon, requiresNovel: true },
   { to: '/plot-timeline', label: '剧情时间线', icon: TimelineIcon, requiresNovel: true },
-  { to: '/world-setting', label: '世界观设定', icon: GlobeIcon, requiresNovel: true },
-  { to: '/summaries', label: '摘要管理', icon: ListIcon, requiresNovel: true },
 ]
 
 export default function MainLayout() {
