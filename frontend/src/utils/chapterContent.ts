@@ -75,25 +75,46 @@ export function chapterContentToPlainText(raw: string | null | undefined): strin
 }
 
 export function plainTextToMinimalDoc(text: string): PMJSON {
-  const t = (text ?? '').trimEnd()
+  // 统一换行符，避免 Windows \r\n 导致“空行分段”失效
+  const t = (text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd()
   if (!t) return { type: 'doc', content: [{ type: 'paragraph' }] }
 
-  // 简单按空行分段，避免整章一段
-  const paras = t
-    .split(/\n{2,}/g)
-    .map((p) => p.trim())
-    .filter(Boolean)
+  // 逐行解析，保留“空白段落”（空行在富文本里应表现为一个空 paragraph 节点）
+  // 这样保存/编辑后不会把“空一行”的段落间距吃掉。
+  const lines = t.split('\n')
+  const paras: Array<{ lines: string[]; empty?: boolean }> = []
+  let cur: string[] = []
+
+  const flush = () => {
+    if (cur.length > 0) {
+      paras.push({ lines: cur })
+      cur = []
+    }
+  }
+
+  for (const line of lines) {
+    if (line.trim() === '') {
+      flush()
+      paras.push({ lines: [], empty: true })
+      continue
+    }
+    cur.push(line)
+  }
+  flush()
 
   return {
     type: 'doc',
-    content: paras.map((p) => ({
-      type: 'paragraph',
-      content: p.split('\n').flatMap((line, idx) => {
-        const nodes: PMJSON[] = []
-        if (idx > 0) nodes.push({ type: 'hardBreak' })
-        if (line.length > 0) nodes.push({ type: 'text', text: line })
-        return nodes
-      }),
-    })),
+    content: paras.map((p) => {
+      if (p.empty) return { type: 'paragraph' } as PMJSON
+      return {
+        type: 'paragraph',
+        content: p.lines.flatMap((line, idx) => {
+          const nodes: PMJSON[] = []
+          if (idx > 0) nodes.push({ type: 'hardBreak' })
+          if (line.length > 0) nodes.push({ type: 'text', text: line })
+          return nodes
+        }),
+      } as PMJSON
+    }),
   }
 }

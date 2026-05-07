@@ -9,6 +9,9 @@ import { listPlotTimelinesByNovel } from '../api/plotTimeline'
 import { listWorldSettingsByNovel } from '../api/worldSetting'
 import { listChaptersByNovel, createChapter } from '../api/chapter'
 import { previewWritingPrompt, consumeWritingGenerateStream } from '../api/writing'
+import { plainTextToMinimalDoc } from '../utils/chapterContent'
+import { ChapterRichEditor } from '../components/chapter/ChapterRichEditor'
+import { useNavigate } from 'react-router-dom'
 import type {
   Chapter,
   Character,
@@ -65,8 +68,9 @@ function buildWritingPayload(
 }
 
 export default function WritingPage() {
-  const { current, refresh } = useNovel()
+  const { current } = useNovel()
   const { draft, update, patch, updateForNovel } = useWritingDraft(current?.id)
+  const navigate = useNavigate()
   const [summaries, setSummaries] = useState<Summary[]>([])
   const [characters, setCharacters] = useState<Character[]>([])
   const [relations, setRelations] = useState<CharacterRelation[]>([])
@@ -251,14 +255,21 @@ export default function WritingPage() {
     handleStopStream()
     const ac = new AbortController()
     streamAbortRef.current = ac
-    patch({ streamText: '' })
+    patch({ streamPlainText: '', streamContent: '' })
     setIsStreaming(true)
     setError('')
     try {
       await consumeWritingGenerateStream(
         payload,
         (chunk) => {
-          update((d) => ({ ...d, streamText: d.streamText + chunk }))
+          update((d) => {
+            const nextPlain = d.streamPlainText + chunk
+            return {
+              ...d,
+              streamPlainText: nextPlain,
+              streamContent: JSON.stringify(plainTextToMinimalDoc(nextPlain)),
+            }
+          })
         },
         { signal: ac.signal },
       )
@@ -279,8 +290,8 @@ export default function WritingPage() {
 
   const handleSaveChapter = async () => {
     if (!current) return
-    const content = draft.streamText.trim()
-    if (!content) {
+    const plain = draft.streamPlainText.trim()
+    if (!plain) {
       setError('请先生成续写正文后再保存')
       return
     }
@@ -288,15 +299,17 @@ export default function WritingPage() {
     setSavingChapter(true)
     setError('')
     try {
-      await createChapter({
+      const res = await createChapter({
         novelId: current.id,
         title,
-        content,
+        // 统一保存为 ProseMirror JSON，确保与章节管理富文本一致
+        content: draft.streamContent || JSON.stringify(plainTextToMinimalDoc(plain)),
         chapterIndex: suggestedIndex,
       })
-      patch({ chapterTitle: '', streamText: '' })
-      await loadMaterials(current.id)
-      await refresh()
+      const created = res.data
+      patch({ chapterTitle: '', streamPlainText: '', streamContent: '' })
+      // 跳转到章节管理并打开刚保存的章节
+      navigate('/chapters', { state: { openChapterId: created.id } })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '保存章节失败')
     } finally {
@@ -542,16 +555,21 @@ export default function WritingPage() {
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-800">续写正文（流式输出）</h2>
               <p className="mt-0.5 text-xs text-slate-400">
-                当前约 {draft.streamText.length} 字（字符数，含标点）。生成中可随时停止。
+                当前约 {draft.streamPlainText.length} 字（字符数，含标点）。生成中可随时停止。
               </p>
             </div>
-            <textarea
-              readOnly
-              value={draft.streamText}
-              rows={16}
-              className="block w-full resize-y border-0 bg-slate-50/50 px-4 py-3 font-serif text-sm leading-relaxed text-slate-800 focus:outline-none md:text-base"
-              placeholder="点击「开始流式续写」后，正文将逐字出现在此处…"
-            />
+            <div className="p-3">
+              <div className={isStreaming ? 'pointer-events-none opacity-90' : ''}>
+                <ChapterRichEditor
+                  initialContent={draft.streamContent}
+                  onChange={(p) => patch({ streamContent: p.jsonString, streamPlainText: p.plainText })}
+                  className="bg-transparent"
+                />
+              </div>
+              {!draft.streamPlainText.trim() ? (
+                <p className="mt-2 text-xs text-slate-400">点击「开始流式续写」后，正文将逐字出现在此处…</p>
+              ) : null}
+            </div>
           </section>
 
           {draft.preview && (
@@ -619,7 +637,7 @@ export default function WritingPage() {
             <button
               type="button"
               onClick={handleSaveChapter}
-              disabled={savingChapter || isStreaming || !draft.streamText.trim()}
+              disabled={savingChapter || isStreaming || !draft.streamPlainText.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50 sm:flex-none sm:px-6"
             >
               {savingChapter ? (

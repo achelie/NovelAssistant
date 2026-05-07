@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNovel } from '../contexts/NovelContext'
 import {
@@ -24,6 +25,8 @@ type OpenState =
 export default function ChapterPage() {
   const { current } = useNovel()
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(false)
   const chapterListScrollRef = useRef<HTMLDivElement | null>(null)
@@ -69,6 +72,36 @@ export default function ChapterPage() {
       setChapters([])
     }
   }, [current, fetchChapters])
+
+  // 从其他页面跳转过来时，自动打开指定章节
+  useEffect(() => {
+    const state = location.state as unknown as { openChapterId?: number } | null
+    const openChapterId = state?.openChapterId
+    if (!current || typeof openChapterId !== 'number') return
+
+    const exists = chapters.some((c) => c.id === openChapterId)
+    if (exists) {
+      setOpen({ mode: 'edit', chapterId: openChapterId })
+      navigate(location.pathname, { replace: true, state: null })
+      return
+    }
+
+    ;(async () => {
+      try {
+        const res = await getChapter(openChapterId)
+        const ch = res.data
+        if (!ch || ch.novelId !== current.id) return
+        setChapters((prev) => {
+          const next = prev.some((x) => x.id === ch.id) ? prev : [...prev, ch]
+          return [...next].sort((a, b) => a.chapterIndex - b.chapterIndex)
+        })
+        setOpen({ mode: 'edit', chapterId: openChapterId })
+        navigate(location.pathname, { replace: true, state: null })
+      } catch {
+        // ignore
+      }
+    })()
+  }, [chapters, current, location.pathname, location.state, navigate])
 
   const handleDeleteChapter = async (id: number) => {
     if (!confirm('确定要删除这个章节吗？')) return

@@ -124,6 +124,7 @@ public class WritingServiceImpl implements WritingService {
                 nullToEmpty(request.getWorldSettingIds()),
                 nullToEmpty(request.getCharacterRelationIds()),
                 nullToEmpty(request.getPlotTimelineIds()),
+                request.getChapterIndex(),
                 request.getChapterOutline(),
                 style,
                 normalizeTargetWordCount(request.getTargetWordCount()),

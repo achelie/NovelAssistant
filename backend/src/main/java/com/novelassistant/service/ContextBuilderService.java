@@ -25,6 +25,7 @@ public interface ContextBuilderService {
             java.util.List<Long> worldSettingIds,
             java.util.List<Long> characterRelationIds,
             java.util.List<Long> plotTimelineIds,
+            Integer chapterIndex,
             String chapterOutline,
             String writingStyle,
             int targetWordCount,

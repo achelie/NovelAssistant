@@ -24,7 +24,10 @@ export interface WritingDraftState {
   outline: string
   writingStyle: string
   chapterTitle: string
-  streamText: string
+  /** 续写正文（富文本 JSON 字符串，ProseMirror/Tiptap doc） */
+  streamContent: string
+  /** 续写正文纯文本（用于字数统计与保存前校验） */
+  streamPlainText: string
   preview: WritingPromptPreview | null
   promptTab: WritingDraftPromptTab
 }
@@ -40,7 +43,8 @@ function emptyDraft(): WritingDraftState {
     outline: '',
     writingStyle: '',
     chapterTitle: '',
-    streamText: '',
+    streamContent: '',
+    streamPlainText: '',
     preview: null,
     promptTab: 'full',
   }
