@@ -61,8 +61,9 @@ export async function consumeWritingGenerateStream(
   let buffer = ''
 
   const emitPayload = (raw: string) => {
-    const s = raw.trimEnd()
-    if (!s || s === '[DONE]') return
+    // 不要 trimEnd：模型可能会以 token 形式输出换行符（\n），trim 会导致分段丢失
+    const s = raw.endsWith('\r') ? raw.slice(0, -1) : raw
+    if (s === '' || s === '[DONE]') return
     if (s.startsWith('{')) {
       try {
         const j = JSON.parse(s) as { choices?: Array<{ delta?: { content?: string } }> }
@@ -89,14 +90,16 @@ export async function consumeWritingGenerateStream(
       const block = buffer.slice(0, sep)
       buffer = buffer.slice(sep + 2)
       const lines = block.split('\n')
-      let hadData = false
+      const dataLines: string[] = []
       for (const line of lines) {
         if (line.startsWith('data:')) {
-          emitPayload(line.slice(5).trimStart())
-          hadData = true
+          dataLines.push(line.slice(5).trimStart())
         }
       }
-      if (!hadData && block.trim()) {
+      if (dataLines.length > 0) {
+        // SSE 允许一个 event 有多行 data:，这些行之间应保留换行
+        emitPayload(dataLines.join('\n'))
+      } else if (block.trim()) {
         emitPayload(block)
       }
     }
@@ -104,9 +107,11 @@ export async function consumeWritingGenerateStream(
 
   if (buffer.trim()) {
     const lines = buffer.split('\n')
+    const dataLines: string[] = []
     for (const line of lines) {
-      if (line.startsWith('data:')) emitPayload(line.slice(5).trimStart())
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
       else if (line.trim()) emitPayload(line)
     }
+    if (dataLines.length > 0) emitPayload(dataLines.join('\n'))
   }
 }

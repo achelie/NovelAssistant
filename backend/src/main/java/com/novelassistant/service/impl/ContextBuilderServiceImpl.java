@@ -25,7 +25,8 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
     private final ZhipuAiService zhipuAiService;
 
     private static final int RAG_TOP_K = 5;
-    private static final int MAX_SUMMARY_LENGTH = 500;
+    // 允许“剧情背景（摘要）”拼接的最大长度（字符数），用于承载较长的多章背景
+    private static final int MAX_SUMMARY_LENGTH = 10_000;
     private static final int MAX_SUMMARY_COUNT = 20;
 
     @Override
@@ -33,7 +34,8 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
         return "你是一位专业的小说创作者，擅长根据已有设定续写连贯的章节内容。" +
                "你需要严格遵循给定的角色性格、世界观设定、剧情走向与文风要求，" +
                "保持情节连贯、人物形象鲜明。" +
-               "输出纯小说正文内容，不要添加任何元信息、标题前缀或 Markdown 解释。";
+               "输出纯小说正文内容，不要添加任何元信息、标题前缀或 Markdown 解释。" +
+               "排版要求（必须严格遵守）：每一句话结束后立刻换行，段与段之间空一行；不要把多句挤在同一段里。若未按格式输出，视为不合格输出，需要你自动纠正并按格式重排后再输出。";
     }
 
     @Override
@@ -97,7 +99,12 @@ public class ContextBuilderServiceImpl implements ContextBuilderService {
         if (StringUtils.hasText(context.writingStyle())) {
             prompt.append("- 文风须符合「文风要求」一节。\n");
         }
-        prompt.append("- 直接输出小说正文，不要章节标题、不要作者按语。");
+        prompt.append("- 直接输出小说正文，不要章节标题、不要作者按语。\n");
+        prompt.append("- 排版（必须）：每一句话结束后立刻换行，段与段之间空一行；不要把多句挤在同一段里。\n");
+        prompt.append("- 输出格式示例（仅示例格式，不要照抄内容）：\n");
+        prompt.append("她推开门。\n\n");
+        prompt.append("屋里一片漆黑。\n\n");
+        prompt.append("远处传来脚步声。");
 
         return prompt.toString();
     }
